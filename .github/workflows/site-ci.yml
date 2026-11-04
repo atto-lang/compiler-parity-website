@@ -1,0 +1,17 @@
+name: Website source-only smoke
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  source-only-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Syntax and structural UI views (NOT guest compiler parity)
+        run: |
+          node --check data.js
+          node --check app.js
+          node tests/smoke.cjs

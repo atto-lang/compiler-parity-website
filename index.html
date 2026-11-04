@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b101a" />
+  <meta name="description" content="AttoLang engineering command center — evidence-grounded backend parity and CI operations." />
+  <title>AttoLang · Engineering Command Center</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="appShell" class="shell">
+  <aside class="sidebar" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brandmark" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><strong>atto<span>lang</span></strong><small>ENGINEERING OS</small></div>
+    </div>
+    <div class="sidebar-section">WORKSPACE</div>
+    <nav id="nav" class="nav" aria-label="Views"></nav>
+    <div class="sidebar-bottom">
+      <div class="side-callout"><div class="signal-dot"></div><div><strong>Evidence-first</strong><p>No green badges for unexecuted guest code.</p></div></div>
+      <div class="side-snapshot"><span>DATA SOURCE</span><b>GitHub snapshot</b><small>Manual JSON import · No live polling</small></div>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <button class="icon-btn mobile-menu" id="mobileMenu" title="Toggle menu" aria-label="Toggle menu">☰</button>
+      <div class="breadcrumbs"><span>WORKSPACE</span><span class="crumb-divider">/</span><b id="currentCrumb">Overview</b></div>
+      <div class="top-actions">
+        <button id="globalSearchBtn" class="search-trigger" title="Command search (Ctrl+K)"><span>⌕</span><span>Search anything</span><kbd>⌘ K</kbd></button>
+        <button class="btn btn-ghost desktop-action" id="importBtn"><span>⇧</span> Import</button>
+        <button class="btn btn-ghost desktop-action" id="exportBtn"><span>⇩</span> Export</button>
+        <button class="btn btn-primary" id="newBtn"><span>＋</span> New record</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+      </div>
+    </header>
+    <main class="main">
+      <div id="viewIntro"></div>
+      <section id="filterArea" class="filter-area" aria-label="Data filters"></section>
+      <section id="view" class="view" aria-live="polite"></section>
+      <footer class="footer"><span>AttoLang / Oreslang · evidence-driven engineering</span><span>Local workspace · No external data uploads</span></footer>
+    </main>
+  </div>
+</div>
+<div id="drawerScrim" class="scrim" hidden></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-label="Record details" hidden></aside>
+<div id="modalScrim" class="scrim modal-scrim" hidden></div>
+<div id="modal" class="modal" role="dialog" aria-modal="true" aria-label="Create a record" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
