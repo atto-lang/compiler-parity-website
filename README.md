@@ -32,13 +32,30 @@ There are shared filters for **repository, PR, backend, workflow, fixture, layou
 ## Evidence semantics — fail closed
 
 - `steps=[]`, `steps=null` or zero observed job steps means **runner admission was not established**. Do not report these jobs as source compilation failures.
-- A workflow's `conclusion=failure` without inspected job steps means **unknown stage**, not automatically runner admission or compiler failure.
+- A workflow's `conclusion=failure` without inspected job steps means **unknown stage**, not automatically runner admission or compiler failure. Explicit zero steps mean **no execution recorded**, but do not independently establish the cause.
 - Real stepped Rust reference, Node host-side tests and source-free GraalVM Native Image probes are **host-only evidence**. Those cannot establish `.atto` compiler or guest parity.
 - `ATTO_GUEST_COMPILER_EXECUTION=NOT_EXECUTED` means **guest parity is not proven**.
 - Authored fixtures, source-tree inspection, host-only mutation tests, an `ore`/`atto` launcher stub, and expected exit values are all distinct from actual guest execution.
 - A native guest receipt needs an independently audited run and job attempt, nonzero steps, full head/tree identity, source compiler, native/AOT linking where required, exact fixture blobs, native guest exit/output and negative mutation controls.
 - Workflow phase counters count `sourceCompiled` and `nativeLinked` only when a **bound audited receipt** is present. The import schema can carry `proof` fields for future auditable updates, but the site does **not** independently query a remote API to validate a claimed receipt. Always verify imported receipts against GitHub before trusting or publishing.
 - Requested reviewers and Git mergeability do not substitute for submitted independent approval, branch protection, exact-head CI or a verified merge commit.
+
+## Imported proof is never an authenticated verdict
+
+This browser is offline and accepts user-provided JSON and localStorage values. A JSON
+`proof.independentlyAudited: true`, `receiptVerified: true`, matching SHA strings,
+or a reported `merged: true` is **self-asserted** and cannot authenticate GitHub
+runs, job steps, a compiler binary, or guest output. Even structurally complete
+imported proof is shown as **Guest claim · unverified**; authenticated guest,
+source-compilation and native-link counters remain unproven in this static site.
+Only a separately trusted CI/connector verification can issue a release verdict;
+a future cryptographically verifiable signed import would require an explicitly
+trusted signing key and real signature verification before elevating counters.
+
+`steps=null` is **uninspected**, not a proven zero-step failure.
+An explicit `steps=[]` or zero is **no steps recorded**, not a proven billing,
+policy or runner-admission root cause. Any imported conclusion is subject to
+the same provenance limitation.
 
 ## Seed provenance
 
