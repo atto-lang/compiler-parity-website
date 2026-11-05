@@ -48,3 +48,9 @@ const zero=renderAdversarial(seed=>{seed.workflows[0].steps=0;seed.workflows[0].
 assert.match(zero,/No steps recorded · cause unverified/);
 assert.doesNotMatch(zero,/Runner admission confirmed failed/);
 console.log('PASS 2/2 hostile-import classifications; static snapshot cannot assert authenticated proof.');
+
+
+const claimedMerge=renderAdversarial(seed=>{seed.prs[0].merged=true;},'integrity');
+assert.match(claimedMerge,/imported merge assertion/);
+assert.match(claimedMerge,/static JSON snapshot cannot authenticate merge SHA/);
+console.log('PASS imported merge metadata never becomes authenticated GitHub release proof.');
