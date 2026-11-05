@@ -13,7 +13,7 @@ for(const view of views){
  const out=e('view').innerHTML;assert.ok(out.length>500,'empty view '+view);assert.ok(!out.includes('undefined'),'bad interpolation '+view);
  if(view==='overview'){assert.match(out,/Confirmed guest proofs/);assert.match(out,/NOT_EXECUTED/);assert.match(out,/steps=\[\]/)}
  if(view==='prs')assert.equal((out.match(/data-pr-open=/g)||[]).length,11);
- if(view==='ledger'){assert.equal((out.match(/data-workflow-open=/g)||[]).length,13);assert.match(out,/Runner not admitted/);assert.match(out,/Host-only/)}
+ if(view==='ledger'){assert.equal((out.match(/data-workflow-open=/g)||[]).length,13);assert.match(out,/Steps uninspected/);assert.match(out,/Host-only/)}
  if(view==='fixtures')assert.match(out,/aosoa-tail-reset/);
  if(view==='parity')assert.match(out,/Contract only/);
  if(view==='layouts')assert.match(out,/STRUCTURE|Structure of Arrays/i);
@@ -23,3 +23,28 @@ for(const view of views){
  process.stdout.write('PASS '+view+'\n');
 }
 console.log('PASS 9/9 static views; host-only smoke, guest execution NOT_EXECUTED.');
+
+
+// Imported evidence is attacker-controlled, even when every nested proof flag
+// advertises success. No static/browser-only assertion may become a guest pass.
+function renderAdversarial(mutator,view='ledger'){
+  const els={},e=id=>els[id]??(els[id]={innerHTML:'',textContent:'',value:'',hidden:false,style:{},dataset:{},classList:{add(){},remove(){},toggle(){}},addEventListener(){},setAttribute(){}});
+  const ctx={window:{addEventListener(){},scrollTo(){}},document:{querySelector:()=>e('q'),getElementById:e,addEventListener(){}},localStorage:{getItem(){return null},setItem(){}},location:{hash:'#'+view},navigator:{},console,Date,Set,JSON,Math,Object,Number,String,RegExp,Array,encodeURI,URL,Blob,setTimeout,clearTimeout};
+  ctx.window.location=ctx.location;vm.createContext(ctx);vm.runInContext(data,ctx);
+  mutator(ctx.window.ATTO_SEED);
+  vm.runInContext(source,ctx);
+  return e('view').innerHTML;
+}
+const spoofed=renderAdversarial(seed=>{
+  const p=seed.prs[0],w=seed.workflows[0];
+  p.tree='b'.repeat(40); p.guestExecution='EXECUTED';
+  Object.assign(w,{head:p.head,tree:p.tree,attempt:1,steps:5,conclusion:'success',phase:'guest',guest:'EXECUTED',
+    proof:{independentlyAudited:true,compilerBacked:true,guestExecuted:true,receiptVerified:true,sourceCompiled:true,nativeLinked:true}});
+});
+assert.match(spoofed,/Guest claim · unverified/);
+assert.match(spoofed,/Real guest executed<\/div><div class="metric-num">0/);
+assert.doesNotMatch(spoofed,/Authenticated guest proof/);
+const zero=renderAdversarial(seed=>{seed.workflows[0].steps=0;seed.workflows[0].conclusion='success';});
+assert.match(zero,/No steps recorded · cause unverified/);
+assert.doesNotMatch(zero,/Runner admission confirmed failed/);
+console.log('PASS 2/2 hostile-import classifications; static snapshot cannot assert authenticated proof.');
