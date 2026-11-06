@@ -193,7 +193,8 @@ export async function collectRecord(api, initial) {
   p.review = p.approvalsOnHead > 0 ? 'Submitted independent review matched current head (API metadata)' : 'No submitted independent APPROVED review on current head';
   // null protection with 404 could be unprotected or unauthorized; never
   // display that condition as a proven protected branch.
-  p.protectionVerified = Boolean(protection && protection.enabled !== false);
+  p.protectionVerified = Boolean(protection && protection.enabled !== false &&
+    protection.required_pull_request_reviews && protection.required_status_checks);
   p.protectionNote = p.protectionVerified ? 'Protection API policy returned; enforcement must be assessed per rule' : 'Not independently verified protected';
   if (runs && runs.total_count > 100)
     errors.push('RUNS: More than one page; readback incomplete');
