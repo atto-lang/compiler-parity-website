@@ -321,19 +321,34 @@
     }).join(''):noRows())+'</div>';
   }
   function renderEvidence(){
-    var ps=visiblePrs();
-    var rows=ps.map(function(p){
-      var w=p.workflow, cls=stepClassification(w), note=cls==='RUNNER_NOT_ADMITTED'?'Runner admission evidence, not compiler failure':
-        cls==='STEPS_EXECUTED'?'Executed steps only; inspect test scope':'No job-step evidence inspected';
-      return '<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
-        '<td>'+(w?'<a href="'+runUrl(p)+'" target="_blank" rel="noopener noreferrer">'+e(w.run)+'</a>':'Not inspected')+'</td>'+
-        '<td>'+e(w&&w.job?w.job:'—')+'</td><td class="mono">'+e(w&&w.attempt!==null?w.attempt:'Unknown')+'</td>'+
-        '<td>'+e(stepCount(w))+'</td><td>'+stepBadge(p)+'</td>'+
-        '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+'</span><div class="sub-cell">Run-head bound: '+(w&&w.headBound?'Claimed, requires independent audit':'no')+'</div></td>'+
-        '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>';
-    }).join('');
-    return '<div class="notice"><strong>Scope boundary:</strong> even a successful workflow conclusion does not establish that the original PR head was checked out or that compiler→IR/CIL/Wasm→link/AOT→guest actually ran. This site cannot independently authenticate imported JSON or artifact signatures.</div>'+
-      '<div class="stack">'+sectionOpen('Workflow evidence ledger','Job steps, attempts, exact-head provenance and guest classification','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Observed steps</th><th>Admission</th><th>Source head</th><th>Guest claim</th></tr></thead><tbody>'+rows+'</tbody></table>'+(ps.length?'':noRows())+'</div>')+
+    var ps=visiblePrs(),rows=[];
+    ps.forEach(function(p){
+      var w=p.workflow, jobs=w&&Array.isArray(w.jobs)&&w.jobs.length?w.jobs:[null];
+      jobs.forEach(function(job){
+        var cls=job?job.classification:stepClassification(w);
+        var steps=job?job.steps:stepCount(w);
+        var label=cls==='RUNNER_NOT_ADMITTED'?'Runner not admitted':
+          cls==='STEPS_EXECUTED'?'Started steps claimed':
+          cls==='STEP_RECORDS_NOT_EXECUTED'?'Unstarted/skip-only records':
+          cls==='STEP_COUNT_CLAIMED'?'Count-only claim':'Not inspected';
+        var note=cls==='RUNNER_NOT_ADMITTED'?'No runner execution established, not compiler failure':
+          cls==='STEPS_EXECUTED'?'GitHub step readback, original checkout and guest unverified':
+          'No independently verified compiler-backed guest result';
+        var jobName=job?job.name:w&&w.job||'—';
+        var attempted=w&&w.attempt!==null?w.attempt:'Unknown';
+        var run=w&&Number.isSafeInteger(w.run)&&w.run>0?w.run:null;
+        var link=run?'<a href="https://github.com/'+encodeURI(p.repo)+'/actions/runs/'+run+
+          '" target="_blank" rel="noopener noreferrer">'+run+'</a>':'Not inspected';
+        rows.push('<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
+          '<td>'+link+'</td><td>'+e(jobName)+'</td><td class="mono">'+e(attempted)+'</td>'+
+          '<td>'+e(steps)+'</td><td>'+badge(label,cls==='RUNNER_NOT_ADMITTED'?'red':cls==='STEPS_EXECUTED'?'amber':'gray')+'</td>'+
+          '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+
+          '</span><div class="sub-cell">Run head readback ≠ actual checkout head</div></td>'+
+          '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>');
+      });
+    });
+    return '<div class="notice"><strong>Scope boundary:</strong> these are reported GitHub job records, not independently authenticated run or compiler receipts. In particular, nonempty entries and run-head equality never prove actual checkout, .atto compilation, linkage or guest execution.</div>'+
+      '<div class="stack">'+sectionOpen('Workflow evidence ledger','One row per job when collector evidence includes job details','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Started-step count</th><th>Admission</th><th>Source head</th><th>Guest</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+(rows.length?'':noRows())+'</div>')+
       sectionOpen('Evidence promotion ladder','Never infer a stronger class from a weaker artifact','<div class="panel-body"><div class="receipt-policy">'+
         [['Source-authored','Specification, .atto fixture and test file exist; no execution implied.'],
          ['Model / host executed','A finite model or standalone host test ran; no production refinement implied.'],
@@ -407,6 +422,8 @@
       detail('Backend',p.backend)+detail('Severity',p.severity)+
       detail('Head SHA',p.head)+detail('Root tree',p.tree||'Not verified')+
       detail('Tree source',p.treeSource)+
+      detail('Runner checkout head/tree', 'Not independently verified by metadata collector')+
+      detail('Per-job readback',w&&Array.isArray(w.jobs)?w.jobs.map(function(j){return j.name+': '+j.classification+' (attempt '+j.attempt+')';}).join('; '):'Not inspected')+
       detail('Mapped invariants',p.invariants.map(nameFor).join('; '))+
       detail('Threat model',p.threat)+detail('Formal spec / model',p.formal)+
       detail('Properties',p.properties)+detail('Mutation tests',p.mutation)+
