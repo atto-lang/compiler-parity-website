@@ -5,6 +5,7 @@ permissions:
   contents: read
 jobs:
   read-only-metadata:
+    if: github.ref == 'refs/heads/main'
     name: audit-github-metadata-no-guest-claims
     runs-on: ubuntu-latest
     timeout-minutes: 20
