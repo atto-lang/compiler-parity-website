@@ -19,7 +19,7 @@ function response(body,status=200){
 }
 function makeFixture({steps=null,runHead=A,withReview=true,duplicate=false,
                       deny=false,changeHead=false,missingAttempt=false,
-                      sameAuthorApproval=false}={}){
+                      sameAuthorApproval=false,protectionDenied=false}={}){
   const calls=[];
   const fetchImpl=async(url,opts)=>{
     assert.equal(opts.method,'GET');
@@ -39,7 +39,8 @@ function makeFixture({steps=null,runHead=A,withReview=true,duplicate=false,
         user:{login:sameAuthorApproval?'author':'independent'},
         submitted_at:'2026-11-06T20:01:00Z'}] : []);
     if(path===base+'/branches/main/protection')
-      return response({required_pull_request_reviews:{},required_status_checks:{}});
+      return protectionDenied ? response({message:'forbidden'},403) :
+        response({required_pull_request_reviews:{},required_status_checks:{});
     if(path.startsWith(base+'/actions/runs?'))
       return response({total_count:1,workflow_runs:[
         {id:33,head_sha:runHead,event:'pull_request',run_attempt:missingAttempt?null:2,
@@ -99,6 +100,12 @@ test('stale seed SHAs invalidate old metadata and remain explicitly visible',asy
 test('self-review never satisfies independent approval',async()=>{
   const p=await auditPR(makeFixture({sameAuthorApproval:true}).client,original);
   assert.equal(p.verification.approval.status,'INDEPENDENT_APPROVAL_UNVERIFIED');
+});
+test('denied branch protection read leaves review enforcement unverified',async()=>{
+  const p=await auditPR(makeFixture({protectionDenied:true}).client,original);
+  assert.equal(p.verification.branchProtection,'UNVERIFIED');
+  assert.equal(p.verification.headReadback,true);
+  assert.equal(p.verification.runnerCheckoutExactHead,false);
 });
 test('wrong-run head is never used as a valid workflow result',async()=>{
   const p=await auditPR(makeFixture({runHead:B}).client,original);
