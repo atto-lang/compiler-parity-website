@@ -72,6 +72,16 @@
           !(Array.isArray(s) && s.length<=200)) throw new Error('Invalid job step declaration');
       }
     });
+    if(d.modelReport){
+      var m=d.modelReport;
+      if(m.classification!=='BOUNDED_DESIGN_MODEL_ONLY' ||
+         !Array.isArray(m.models) || m.models.length>50 ||
+         !Array.isArray(m.negativeControls) || m.negativeControls.length>100 ||
+         m.models.some(function(x){return !x || typeof x!=='object' || typeof x.model!=='string' || typeof x.result!=='string';}) ||
+         m.negativeControls.some(function(x){return !x || typeof x!=='object' || typeof x.mutant!=='string' ||
+           !x.result || typeof x.result!=='object' || !Array.isArray(x.result.trace) || x.result.trace.length>100;}))
+        throw new Error('Invalid bounded-model report');
+    }
     d.invariants.forEach(function(x){if(typeof x.name!=='string' || typeof x.id!=='string')throw new Error('Invalid invariant');});
     d.tasks.forEach(function(t){if(!byRef(d.prs,t.prId) || !byRef(d.invariants,t.invariant))throw new Error('Task references missing PR or invariant');});
     d.templates.forEach(function(t){if(!byRef(d.invariants,t.invariant))throw new Error('Template invariant missing');});
