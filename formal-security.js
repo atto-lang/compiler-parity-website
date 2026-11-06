@@ -93,7 +93,7 @@
   }
   function stepLabel(p) {
     var v=stepClassification(p.workflow);
-    return v==='RUNNER_NOT_ADMITTED' ? 'Runner not admitted' : v==='STEPS_EXECUTED' ? 'Steps executed · scope unknown' : 'Not inspected';
+    return v==='RUNNER_NOT_ADMITTED' ? 'Runner not admitted' : v==='STEPS_EXECUTED' ? (data.imported ? 'Claimed steps · not audited' : 'Steps executed · scope unknown') : 'Not inspected';
   }
   function stepBadge(p) {
     var v=stepClassification(p.workflow);
@@ -362,7 +362,7 @@
   function openPR(id){
     var p=byPr(id);if(!p)return;
     var w=p.workflow;
-    var body='<div class="detail-banner">Guest parity NOT EXECUTED / independently unverified. '+e(mergeGate(p))+'.</div>'+
+    var body='<div class="detail-banner">Guest parity is independently UNPROVEN. '+e(mergeGate(p))+'.</div>'+
       detail('Repository',p.repo)+detail('Pull request','#'+p.number+' · '+p.state)+
       detail('Backend',p.backend)+detail('Severity',p.severity)+
       detail('Head SHA',p.head)+detail('Root tree',p.tree||'Not verified')+
