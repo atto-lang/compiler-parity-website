@@ -239,6 +239,10 @@ async function main() {
   const token=process.env.ATTO_ASSURANCE_READER_TOKEN;
   const client=makeClient({token,fetchImpl:globalThis.fetch});
   const result=await collect(loadTrustedSeed(path.join(root,'formal-data.js')),client);
+  // Bounded design-model output is separate from GitHub and guest evidence.
+  result.modelReport=require('../formal/models/check-bounded-safety.cjs').verificationReport();
+  if(result.modelReport.success!==true) throw new EvidenceError('BOUNDED_DESIGN_MODEL_FAILED');
+
   fs.mkdirSync(path.dirname(destination),{recursive:true,mode:0o700});
   fs.writeFileSync(destination,JSON.stringify({snapshot:result,
     warning:'Metadata-only; imported JSON cannot establish runner checkout or compiler guest execution.'},null,2),{mode:0o600});
