@@ -1,0 +1,42 @@
+name: Private Atto assurance evidence collector
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-metadata:
+    name: audit-github-metadata-no-guest-claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATTO_ASSURANCE_READER_TOKEN: ${{ secrets.ATTO_ASSURANCE_READER_TOKEN }}
+    steps:
+      - name: Require dedicated restricted read-only credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$ATTO_ASSURANCE_READER_TOKEN" ]; then
+            echo "::error::Configure a dedicated read-only metadata token restricted to the approved private repositories. No source mirrors or public export."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Collect PR, commit tree, reviews, runs and job-step metadata
+        run: |
+          node --check bin/collect-assurance-evidence.cjs
+          node bin/collect-assurance-evidence.cjs --output artifacts/assurance-snapshot.json
+      - name: Upload private audit snapshot only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-assurance-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/assurance-snapshot.json
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Never declare guest evidence
+        if: ${{ always() }}
+        run: echo "Collector is READ_ONLY and METADATA_ONLY. Guest execution and runner checkout are UNVERIFIED."
