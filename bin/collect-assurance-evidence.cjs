@@ -147,10 +147,16 @@ async function auditPR(client, original, {maxRuns=MAX_RUNS} = {}) {
   const approval = latestApproval(reviews, remote.user && remote.user.login, head);
   // GitHub may return a 404 for unprotected branches or restricted viewers; never infer protection from it.
   let protection = 'UNVERIFIED';
-  const protectedEndpoint=await client.get(prefix+'/branches/'+encodeURIComponent(remote.base.ref)+'/protection',true);
-  if (protectedEndpoint && typeof protectedEndpoint === 'object' &&
-    protectedEndpoint.required_pull_request_reviews && protectedEndpoint.required_status_checks)
-    protection='PROTECTION_RULES_OBSERVED';
+  try {
+    const protectedEndpoint=await client.get(prefix+'/branches/'+encodeURIComponent(remote.base.ref)+'/protection',true);
+    if (protectedEndpoint && typeof protectedEndpoint === 'object' &&
+      protectedEndpoint.required_pull_request_reviews && protectedEndpoint.required_status_checks)
+      protection='PROTECTION_RULES_OBSERVED';
+  } catch(err) {
+    // Lack of permission for protection metadata does not erase other readbacks.
+    // It remains a hard merge-readiness hold.
+    if(!(err instanceof EvidenceError) || err.code!=='API_ACCESS_DENIED') throw err;
+  }
   const runEnvelope=await client.get(prefix+'/actions/runs?head_sha='+head+'&event=pull_request&per_page=100');
   insist(runEnvelope && Array.isArray(runEnvelope.workflow_runs),'BAD_RUN_LIST');
   const matching=runEnvelope.workflow_runs.filter(r=>r && r.head_sha===head && r.event==='pull_request')
