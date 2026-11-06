@@ -25,6 +25,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Verify exact checkout Git head and tree
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -44,9 +47,6 @@ jobs:
             jobName:process.env.GITHUB_JOB,source:"git rev-parse on original PR checkout"};
           fs.writeFileSync("artifacts/assurance-checkout.json",JSON.stringify(c,null,2)+"\n");
           '
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
       - name: Validate syntax
         run: |
           node --check formal-data.js
