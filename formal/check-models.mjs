@@ -35,6 +35,34 @@ export const models = {
       return null;
     }
   },
+  actorBorrow: {
+    assumptions: 'A/B actor owners; 0..2 concurrent readers, one exclusive writer; two generations; atomic take/release/transfer.',
+    init: {owner:'A',epoch:0,readers:0,writer:null},
+    successors(s,mutant) {
+      const next=[];
+      if(s.writer===null && s.readers<2)
+        next.push(record('acquire-shared-reader',changed(s,{readers:s.readers+1})));
+      if(s.readers>0)
+        next.push(record('release-shared-reader',changed(s,{readers:s.readers-1})));
+      if(s.writer===null && (s.readers===0 || mutant==='write-with-active-reader'))
+        next.push(record('acquire-exclusive-writer',
+          changed(s,{writer:{actor:s.owner,generation:s.epoch}})));
+      if(s.writer!==null)
+        next.push(record('release-exclusive-writer',changed(s,{writer:null})));
+      if(s.epoch===0 && s.readers===0 && s.writer===null)
+        next.push(record('rt-take-owner-to-B',changed(s,{owner:'B',epoch:1})));
+      if(mutant==='stale-writer-after-take' && s.epoch===1 && s.writer===null)
+        next.push(record('mutant-use-stale-writer',changed(s,{writer:{actor:'A',generation:0}})));
+      return next;
+    },
+    violation(s) {
+      if(s.readers<0 || s.readers>2)return 'borrow accounting outside 0..2';
+      if(s.readers>0 && s.writer!==null)return 'exclusive write overlaps shared borrow';
+      if(s.writer && s.writer.actor!==s.owner)return 'writer has wrong actor ownership';
+      if(s.writer && s.writer.generation!==s.epoch)return 'writer crosses ownership generation';
+      return null;
+    }
+  },
   cancellation: {
     assumptions: 'One bounded waiter, explicit cancellation and wakeup, fair enabled-wakeup scheduling.',
     init: {cancel:false,waiting:true,released:false,charged:1,completion:0},
@@ -151,6 +179,7 @@ export function explore(model, {mutant=null,maxStates=30000,maxDepth=16}={}) {
 
 export const mutationSuite = Object.freeze({
   actor:['foreign-writer'],
+  actorBorrow:['write-with-active-reader','stale-writer-after-take'],
   cancellation:['lost-wakeup','double-completion'],
   pubsub:['early-ack','stale-queue'],
   hotreload:['retain-stale-ticket']
