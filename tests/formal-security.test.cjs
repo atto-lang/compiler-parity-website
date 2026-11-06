@@ -53,7 +53,7 @@ for(const view of ['overview','registry','invariants','evidence','queue','templa
   assert.equal(x.seed.templates.length,9);
   if(view==='registry'){
     assert.match(x.nodes.view.innerHTML,/Merged/);
-    assert.match(x.nodes.view.innerHTML,/Not verified/);
+    assert.match(x.nodes.view.innerHTML,/not verified/i);
   }
   if(view==='evidence'){
     assert.match(x.nodes.view.innerHTML,/Runner not admitted/);
