@@ -133,7 +133,7 @@ test('bounded actor and pub-sub safety models have reachable finite-state result
   assert.equal(out.success,true);
   assert.equal(out.classification,'BOUNDED_DESIGN_MODEL_ONLY');
   assert.ok(out.models.every(x=>x.result==='BOUNDED_SAFETY_HOLDS' && x.states>1 && x.edges>0));
-  assert.equal(out.negativeControls.length,4);
+  assert.equal(out.negativeControls.length,5);
   assert.ok(out.negativeControls.every(x=>x.result.result==='COUNTEREXAMPLE' && x.result.trace.length>0));
 });
 test('each unsafe mutation is killed by a concrete safety invariant',()=>{
@@ -141,4 +141,5 @@ test('each unsafe mutation is killed by a concrete safety invariant',()=>{
   assert.equal(model.actorModel('allow-stale-writer').violation,'WRONG_ACTOR_OWNER');
   assert.equal(model.pubModel('early-ack').violation,'EARLY_ACK_OR_UNCOMMITTED_DELIVERY');
   assert.equal(model.pubModel('retain-old-queue').violation,'STALE_SUBSCRIPTION_GENERATION');
+  assert.equal(model.pubModel('retain-cancelled-queue').violation,'CANCELLED_PUBLISHER_HAS_QUEUED_DELIVERY');
 });
