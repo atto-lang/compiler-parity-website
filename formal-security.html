@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101e22">
+  <meta name="description" content="AttoLang assurance dashboard for formal-methods, security, exact-head CI evidence, guest-conformance and safe merge readiness.">
+  <title>AttoLang Assurance · Formal Methods & Security</title>
+  <link rel="stylesheet" href="formal-security.css">
+</head>
+<body>
+<div id="shell" class="shell">
+  <aside class="sidebar" aria-label="Assurance navigation">
+    <div class="brand"><div class="logo" aria-hidden="true">a</div><div><strong>atto / assurance</strong><span>FORMAL ENGINEERING</span></div></div>
+    <p class="side-label">WORKSPACE</p>
+    <nav class="nav" id="nav">
+      <button data-view="overview" class="active"><svg viewBox="0 0 24 24"><path d="M3 13h7V3H3zM14 21h7v-8h-7zM14 3h7v6h-7zM3 17h7v4H3z"/></svg>Command overview</button>
+      <button data-view="registry"><svg viewBox="0 0 24 24"><path d="M6 3v12m0-8h8m0 0v6m-8 2v6m8-8v8m-11 0h18"/></svg>Repository & PR registry</button>
+      <button data-view="invariants"><svg viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 6-4 9-9 10-5-1-9-4-9-10V6zM9 12l2 2 4-5"/></svg>Threats & invariants</button>
+      <button data-view="evidence"><svg viewBox="0 0 24 24"><path d="M4 4v16h16M7 14l4-5 4 4 4-8"/></svg>Execution evidence</button>
+      <button data-view="queue"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16M7 4v4m0 2v4m0 2v4"/></svg>Hardening queues</button>
+      <button data-view="templates"><svg viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5zM8 10h9M8 14h9M8 18h6"/></svg>Reusable specifications</button>
+    </nav>
+    <div class="side-bottom">
+      <div class="side-notice"><i class="pulse" aria-hidden="true"></i><div><b>Fail-closed evidence</b><p>Unexecuted jobs and host-only models never become compiler-backed guest proofs.</p></div></div>
+      <a class="side-link" href="index.html">Engineering command center <span aria-hidden="true">↗</span></a>
+      <a class="side-link" href="https://github.com/ores-truffle-oreslang/compiler-parity-website" target="_blank" rel="noopener noreferrer">Source repository <span aria-hidden="true">↗</span></a>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="crumbs"><button class="btn mobile-menu" id="mobileMenu" aria-label="Toggle navigation">☰</button><span>ATTO ECOSYSTEM</span><span class="sep">/</span><b id="breadcrumb">Assurance overview</b></div>
+      <div class="top-actions">
+        <button class="btn desktop" id="importBtn" type="button">↑ Import snapshot</button>
+        <button class="btn desktop" id="exportBtn" type="button">↓ Export JSON</button>
+        <button class="btn dark" id="csvBtn" type="button">↓ Filtered CSV</button>
+        <input hidden type="file" id="fileInput" accept=".json,application/json">
+      </div>
+    </header>
+    <main class="main">
+      <header class="headline">
+        <div>
+          <div class="eyebrow">Operational trust ledger</div>
+          <h1 id="pageTitle">Formal methods & security</h1>
+          <p id="pageDescription">A shared map of threats, invariants, bounded proofs, adversarial tests, CI provenance, and real guest-conformance gaps.</p>
+        </div>
+        <div class="snapshot"><b>GitHub snapshot · not live</b><small id="snapshotTime">Captured 06 Nov 2026</small></div>
+      </header>
+      <section class="hero" aria-label="Evidence policy">
+        <div>
+          <div class="kicker">The evidence boundary</div>
+          <h2>Verified execution beats green-looking paperwork.</h2>
+          <p><strong>steps=[]</strong>, <strong>steps=null</strong>, or zero steps mean runner admission was not established. Host-only tests, authored fixtures and bounded models are not compiled-guest proof. Imported receipts are claims until independently audited.</p>
+        </div>
+        <div class="hero-note"><b id="guestProofs">0 independently verified</b><span>FIVE-BACKEND GUEST PARITY CLAIMS</span></div>
+      </section>
+      <section class="metrics" id="metrics" aria-label="Current filtered metrics"></section>
+      <section class="filterbar" aria-label="Shared dashboard filters">
+        <div class="filter-head"><b>FILTER THE ASSURANCE SURFACE</b><small>Filters apply across views. All data is local to this browser.</small></div>
+        <div class="filters">
+          <div class="field"><label for="fSearch">Search</label><input id="fSearch" placeholder="Threats, model, SHA, PR, task…"></div>
+          <div class="field"><label for="fRepo">Repository</label><select id="fRepo"></select></div>
+          <div class="field"><label for="fBackend">Backend</label><select id="fBackend"></select></div>
+          <div class="field"><label for="fPr">Pull request</label><select id="fPr"></select></div>
+          <div class="field"><label for="fInvariant">Invariant</label><select id="fInvariant"></select></div>
+        </div>
+        <div class="filters extra">
+          <div class="field"><label for="fEvidence">Evidence class</label><select id="fEvidence"></select></div>
+          <div class="field"><label for="fSeverity">Severity</label><select id="fSeverity"></select></div>
+          <div class="field"><label for="fStatus">Status</label><select id="fStatus"></select></div>
+        </div>
+        <div class="filter-bottom"><span><b id="filterCount">—</b> matching PRs · filters do not change GitHub state</span><button class="btn small" id="clearFilters">Clear filters</button></div>
+      </section>
+      <section id="view" aria-live="polite"></section>
+      <footer class="footer"><span>AttoLang / Oreslang · security and formal assurance</span><span>Point-in-time data. Independent reviewers and audited compiler receipts are mandatory.</span></footer>
+    </main>
+  </div>
+</div>
+<div id="scrim" class="inspector-scrim" hidden></div>
+<aside id="inspector" class="inspector" role="dialog" aria-modal="true" aria-label="Evidence details" hidden></aside>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="formal-data.js"></script>
+<script src="formal-security.js"></script>
+</body>
+</html>
