@@ -32,8 +32,8 @@
   var byInv = function (id) { return data.invariants.find(function(v){return v.id===id;}); };
   var taskStatus = function (t) { return taskState[t.id] || t.status || 'Open'; };
   var nameFor = function (id) { var v=byInv(id); return v ? v.name : id; };
-  var isSha = function(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); };
-  var validRepo = function(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); };
+  function isSha(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); }
+  function validRepo(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); }
   function loadSnapshot() {
     try {
       var cached = localStorage.getItem(SNAPSHOT_KEY);
