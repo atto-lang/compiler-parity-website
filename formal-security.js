@@ -72,6 +72,15 @@
           !(Array.isArray(s) && s.length<=200)) throw new Error('Invalid job step declaration');
       }
     });
+    if(d.modelReport){
+      var model=d.modelReport;
+      if(model.classification!=='BOUNDED_DESIGN_MODEL_ONLY' ||
+         !Array.isArray(model.results) || model.results.length>100 ||
+         model.results.some(function(r){return !r || typeof r!=='object' ||
+           typeof r.model!=='string' || r.model.length>100 || typeof r.scope!=='string' ||
+           (r.counterexample && (!Array.isArray(r.counterexample) || r.counterexample.length>60))}))
+        throw new Error('Invalid bounded model report');
+    }
     d.invariants.forEach(function(x){if(typeof x.name!=='string' || typeof x.id!=='string')throw new Error('Invalid invariant');});
     d.tasks.forEach(function(t){if(!byRef(d.prs,t.prId) || !byRef(d.invariants,t.invariant))throw new Error('Task references missing PR or invariant');});
     d.templates.forEach(function(t){if(!byRef(d.invariants,t.invariant))throw new Error('Template invariant missing');});
@@ -236,6 +245,24 @@
   function priorityRow(t,i){
     return '<div class="signal"><div class="signal-n">'+(i+1)+'</div><div><button class="linkish" data-open-task="'+e(t.id)+'">'+e(t.title)+'</button><p>'+e(t.kind)+' · '+e(t.prId)+' · '+e(nameFor(t.invariant))+'</p></div>'+badge(t.priority,t.priority==='P0'?'red':'amber')+'</div>';
   }
+  function renderModelReport(){
+    var m=data.modelReport;
+    if(!m || m.classification!=='BOUNDED_DESIGN_MODEL_ONLY' || !Array.isArray(m.results))
+      return '<div class="panel-body"><div class="notice">No attached model-checker run report. Authored TLA+ files and source-only checks must not be counted as executed proof.</div></div>';
+    var base=m.results.filter(function(r){return !r.mutant;});
+    var bad=m.results.filter(function(r){return r.mutant;});
+    var rows=base.map(function(r){
+      return '<tr><td>'+e(r.model)+'</td><td>'+e(r.states)+'</td><td>'+e(r.edges)+'</td><td>'+badge(r.depthTruncated?'Bound truncated':'Bounded safety result',r.depthTruncated?'red':'amber')+'</td></tr>';
+    }).join('');
+    var mutations=bad.map(function(r){
+      return '<p class="sub-cell"><b>'+e(r.model)+' / '+e(r.mutant)+'</b> · '+e(r.violation||'No violation description')+
+        ' · witness: '+e(Array.isArray(r.counterexample)?r.counterexample.join(' → '):'not recorded')+'</p>';
+    }).join('');
+    return '<div class="panel-body"><div class="notice"><b>BOUNDED_DESIGN_MODEL_ONLY.</b> '+base.length+
+      ' reference models and '+bad.length+' negative controls reported. The imported report is not independently authenticated, and no guest was executed.</div>'+
+      '<div class="table-scroll"><table class="data-table"><thead><tr><th>Model</th><th>Reachable states</th><th>Transitions</th><th>Scope</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div style="margin-top:12px"><b>Mutation witnesses</b>'+mutations+'</div></div>';
+  }
   function renderOverview(){
     var ps=visiblePrs(), total=ps.length, count=function(pred){return ps.filter(pred).length;};
     var bars=[
@@ -259,6 +286,7 @@
         sectionOpen('Verification funnel','The distance from authored checks to guest evidence',funnel)+
         sectionOpen('Immediate priority queue','Highest-impact unresolved tasks',priorities)+
       '</div>'+
+      sectionOpen('Bounded model evidence','Source-only finite-state exploration and mutation witnesses',renderModelReport())+
       sectionOpen('Five-backend evidence map','Coverage describes source/model/host state; it never certifies guest parity','<div class="panel-body">'+renderMatrix()+'</div>')+
       sectionOpen('Non-negotiable acceptance gates','Proof promotion rules are deliberately strict','<div class="panel-body">'+policy+'</div>')+
     '</div>';
