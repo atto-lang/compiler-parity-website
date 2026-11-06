@@ -99,5 +99,26 @@ const malicious=copy(seed);malicious.prs[0].title='<img src=x onerror=alert(1)>'
 const rendered=mount('registry',malicious).nodes.view.innerHTML;
 assert.ok(!rendered.includes('<img src=x'),'unescaped imported PR title');
 assert.match(rendered,/&lt;img/);
+const modelReport=require('../formal/models/check-bounded-safety.cjs').verificationReport();
+const importedSnapshot=copy(seed);
+importedSnapshot.modelReport=modelReport;
+importedSnapshot.prs[0].verification={
+  headReadback:true,rootTreeReadback:true,allRunsInspected:true,
+  runs:[{run:33,attempt:2,jobs:[
+    {id:41,name:'finite-model',class:'STEPS_OBSERVED',observedSteps:3},
+    {id:42,name:'not-admitted',class:'RUNNER_NOT_ADMITTED',observedSteps:0}
+  ]}]
+};
+importedSnapshot.prs[0].workflow={run:33,job:'finite-model',attempt:2,steps:3,headBound:false};
+const importedOverview=mount('overview',importedSnapshot);
+assert.match(importedOverview.nodes.view.innerHTML,/retain-cancelled-queue/);
+const importedEvidence=mount('evidence',importedSnapshot);
+assert.match(importedEvidence.nodes.view.innerHTML,/finite-model/);
+assert.match(importedEvidence.nodes.view.innerHTML,/not-admitted/);
+assert.match(importedEvidence.nodes.view.innerHTML,/Guest UNPROVEN/);
+const malformedReport=copy(importedSnapshot);
+malformedReport.modelReport.negativeControls[0].result.trace='forged';
+assert.throws(()=>test.parseImport(JSON.stringify(malformedReport)),/Invalid bounded-model report/);
+console.log('PASS imported snapshot restore, expanded CI jobs and bounded-model results');
 console.log('PASS evidence state machine, import rejection, XSS escape, merge gating');
 console.log('PASS source-only dashboard tests; NO compiler-backed AttoLang guest proof');
