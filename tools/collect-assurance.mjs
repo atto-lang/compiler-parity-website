@@ -10,6 +10,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import vm from 'node:vm';
 import { pathToFileURL } from 'node:url';
+import { verifyAll } from '../formal/check-models.mjs';
 
 const API = 'https://api.github.com';
 export const MAX_RECORDS = 100;
@@ -273,6 +274,12 @@ async function main() {
   vm.runInNewContext(source,context,{timeout:2000,filename:'formal-data.js'});
   const api = new GitHubReadOnly(token);
   const snapshot = await collectSnapshot(api,context.window.ATTO_ASSURANCE_SEED);
+  snapshot.modelReport = {
+    ...verifyAll(),
+    provenance: 'LOCAL_SOURCE_ONLY_RUN_NOT_INDEPENDENTLY_ATTESTED',
+    modelReceipt: 'NOT_SIGNED',
+    guestExecution: 'NOT_EXECUTED'
+  };
   await mkdir(dirname(output),{recursive:true,mode:0o700});
   await writeFile(output,JSON.stringify(snapshot,null,2)+'\n',{mode:0o600,flag:'w'});
   console.log('ASSURANCE_METADATA_ONLY '+JSON.stringify({
