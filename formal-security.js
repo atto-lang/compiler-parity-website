@@ -32,8 +32,8 @@
   var byInv = function (id) { return data.invariants.find(function(v){return v.id===id;}); };
   var taskStatus = function (t) { return taskState[t.id] || t.status || 'Open'; };
   var nameFor = function (id) { var v=byInv(id); return v ? v.name : id; };
-  var isSha = function(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); };
-  var validRepo = function(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); };
+  function isSha(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); }
+  function validRepo(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); }
   function loadSnapshot() {
     try {
       var cached = localStorage.getItem(SNAPSHOT_KEY);
@@ -79,21 +79,32 @@
   function byRef(items,id){return items.some(function(x){return x.id===id;});}
   function stepClassification(w) {
     if(!w) return 'NOT_INSPECTED';
-    if(w.steps===null || w.steps===0 || (Array.isArray(w.steps) && w.steps.length===0)) return 'RUNNER_NOT_ADMITTED';
-    if(w.steps==='UNKNOWN' || w.steps===undefined) return 'NOT_INSPECTED';
-    if((Array.isArray(w.steps) && w.steps.length>0) || (Number.isInteger(w.steps) && w.steps>0)) return 'STEPS_EXECUTED';
+    if(w.steps===null || w.steps===0 || (Array.isArray(w.steps) && w.steps.length===0))
+      return 'RUNNER_NOT_ADMITTED';
+    var known=['STEPS_EXECUTED','STEP_RECORDS_NOT_EXECUTED','STEP_COUNT_CLAIMED','RUNNER_NOT_ADMITTED','NOT_INSPECTED'];
+    if(known.indexOf(w.stepClassification)>=0)return w.stepClassification;
+    if(Array.isArray(w.steps)){
+      return w.steps.some(function(x){return x&&typeof x.started_at==='string' &&
+        !isNaN(Date.parse(x.started_at)) &&
+        (x.status==='completed'||x.status==='in_progress') && x.conclusion!=='skipped';})?
+        'STEPS_EXECUTED':'STEP_RECORDS_NOT_EXECUTED';
+    }
+    if(Number.isInteger(w.steps)&&w.steps>0)return 'STEP_COUNT_CLAIMED';
     return 'NOT_INSPECTED';
   }
   function stepCount(w) {
     if(!w) return 'Not inspected';
-    if(w.steps===null) return 'null';
-    if(Array.isArray(w.steps)) return '['+w.steps.length+' executed steps]';
-    if(w.steps===undefined) return 'Unknown';
-    return String(w.steps);
+    if(w.steps===null)return 'null';
+    if(Array.isArray(w.steps))return '['+w.steps.length+' records]';
+    return w.steps===undefined ? 'Unknown' : String(w.steps);
   }
   function stepLabel(p) {
     var v=stepClassification(p.workflow);
-    return v==='RUNNER_NOT_ADMITTED' ? 'Runner not admitted' : v==='STEPS_EXECUTED' ? (data.imported ? 'Claimed steps · not audited' : 'Steps executed · scope unknown') : 'Not inspected';
+    if(v==='RUNNER_NOT_ADMITTED')return 'Runner not admitted';
+    if(v==='STEPS_EXECUTED')return data.imported?'Claimed started steps · not authenticated':'Started steps reported · scope unknown';
+    if(v==='STEP_RECORDS_NOT_EXECUTED')return 'Step records · none executed';
+    if(v==='STEP_COUNT_CLAIMED')return 'Claimed count · unaudited';
+    return 'Not inspected';
   }
   function stepBadge(p) {
     var v=stepClassification(p.workflow);
@@ -231,7 +242,7 @@
       ['Tracked source PRs',total],
       ['Reported bounded models',count(function(p){return p.evidence==='BOUNDED_MODEL';})],
       ['Host-only evidence',count(function(p){return p.evidence==='HOST_ONLY';})],
-      ['Runner admitted with steps',count(function(p){return stepClassification(p.workflow)==='STEPS_EXECUTED';})],
+      ['Reported started-step jobs',count(function(p){return stepClassification(p.workflow)==='STEPS_EXECUTED';})],
       ['Independently audited guest',0]
     ];
     var funnel='<div class="panel-body">'+bars.map(function(r,i){return '<div class="bar-row"><span>'+e(r[0])+'</span><div class="bar-bg"><div class="bar '+(i===4?'bar-muted':'')+'" style="width:'+(total?Math.round(r[1]/total*100):0)+'%"></div></div><b>'+r[1]+'</b></div>';}).join('')+'<p class="sub-cell">Counts describe this curated snapshot, not all GitHub PRs. Executed steps do not alone prove compiler/guest success.</p></div>';
