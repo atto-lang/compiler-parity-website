@@ -94,3 +94,23 @@ The interface provides six views: command overview, repository/PR registry, thre
 Run `node --check formal-data.js`, `node --check formal-security.js` and `node tests/formal-security.test.cjs` with Node 22+. The dedicated workflow `.github/workflows/assurance-dashboard.yml` also runs the original site smoke test. These are **source-only site checks**, not AttoLang model-checker execution, compiler tests or five-backend guest parity.
 
 The repository is private. **Do not enable public Pages/hosting without an explicit private-metadata and access review.** The site has no live GitHub credentials, server API, background agent or merge/approval controls. Refresh the snapshot through an authorized and independently audited ingestion pipeline before relying on it for operational approvals.
+
+
+## Formal-assurance evidence collector and executable models
+
+This next-wave implementation adds a **read-only GitHub evidence collector** and **bounded design-level model checks** without granting GitHub write access or making guest parity claims.
+
+Read [private evidence ingestion and runner-recovery guidance](docs/ASSURANCE_INGESTION.md) and [finite-state model assumptions and counterexamples](formal/models/README.md).
+
+The manually triggered workflow is restricted to the repository's main branch and requires an administrator-configured restricted token. It reads approved PR metadata, current Git commit root trees, review decisions, available branch-protection metadata, workflow attempts, and job steps; it never downloads private source from another organization. The output is a short-retention **private artifact**, not an automatically published Pages data feed.
+
+The assurance site's Overview displays a bounded-model result panel when imported JSON contains a model report, and the Execution evidence view expands each audited workflow job. Browser imports cannot independently authenticate Github, run checkout, source compiler artifacts or negative controls; the reported guest-proof count remains zero until a separate audited promotion system exists.
+
+Execute source-only tests locally:
+
+    node --test tests/assurance-collector-models.test.cjs
+    node formal/models/check-bounded-safety.cjs
+    node tests/formal-security.test.cjs
+    node tests/smoke.cjs
+
+The initial isolated source-level evaluation of the safety checker reached 8 actor states / 13 edges and 384 pub-sub states / 600 edges, and produced counterexample traces for five unsafe mutations. None of that is a hosted exact-head CI pass, unbounded proof, or native AttoLang guest result. Do not enable public deployment or an automatic collection schedule until access permissions, Actions runner admission, independent review and artifact confidentiality have been audited.
