@@ -1,0 +1,58 @@
+name: Assurance TLC bounded model checking
+on:
+  pull_request:
+    paths:
+      - 'formal/specs/**'
+      - 'formal/check-models.mjs'
+      - 'formal/refinement/**'
+      - 'tools/run-tlc-assurance.sh'
+      - '.github/workflows/assurance-tlc.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tlc-bounded-design:
+    name: exact-head-tlc-safety-and-counterexamples
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      TLA2TOOLS_JAR: ${{ runner.temp }}/tla2tools.jar
+      EXPECTED_JAR_SHA256: ab323b79802aedc3203b3f9af37c6aca3ed43f4e0225b36f2aa77b26de46c05f
+    steps:
+      - name: Checkout exact original head (never synthetic PR merge)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify source HEAD and tree before external tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse 'HEAD^{tree}' | wc -c)" -eq 41
+      - name: Install Java 21 for TLC
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download immutable named TLC build; require pinned SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://github.com/zactionsz/tla-tools/releases/download/tla2tools-2026.08.11.125311/tla2tools.jar'
+          curl --fail --location --retry 3 --max-time 90 --silent --show-error "$url" -o "$TLA2TOOLS_JAR"
+          echo "$EXPECTED_JAR_SHA256  $TLA2TOOLS_JAR" | sha256sum -c -
+      - name: Execute real TLC for five bounded models and two unsafe-mutant controls
+        shell: bash
+        run: bash tools/run-tlc-assurance.sh
+      - name: Upload source-only TLC logs (no compiler or guest assertions)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlc-bounded-source-only-${{ github.run_id }}-${{ github.run_attempt }}
+          path: private-artifacts/tlc/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Preserve claim boundary
+        run: echo "TLC finite-state safety models only; no AttoLang compiler, executable guest, unbounded proof, runtime refinement or five-backend parity."
