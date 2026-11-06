@@ -94,3 +94,45 @@ The interface provides six views: command overview, repository/PR registry, thre
 Run `node --check formal-data.js`, `node --check formal-security.js` and `node tests/formal-security.test.cjs` with Node 22+. The dedicated workflow `.github/workflows/assurance-dashboard.yml` also runs the original site smoke test. These are **source-only site checks**, not AttoLang model-checker execution, compiler tests or five-backend guest parity.
 
 The repository is private. **Do not enable public Pages/hosting without an explicit private-metadata and access review.** The site has no live GitHub credentials, server API, background agent or merge/approval controls. Refresh the snapshot through an authorized and independently audited ingestion pipeline before relying on it for operational approvals.
+
+### Assurance execution and collection hardening (Nov 6)
+
+The dedicated pull-request workflow now checks out the **immutable PR source
+head** rather than the default synthetic pull-request merge ref. Once a runner
+actually executes, it compares the Git head to the expected SHA, records the
+full tree and run/attempt/job identity, and runs the original dashboard smoke,
+assurance view tests, mocked collector tests, and bounded state models with
+six behavior-changing mutation controls. It uploads a private
+**SOURCE_ONLY_SITE_TEST** receipt. Neither artifact nor workflow success
+certifies AttoLang guest execution or independent receipt authentication.
+
+The separate scheduled collector workflow reads only explicitly scoped GitHub
+API metadata using the dedicated Actions secret named
+ATTO_ASSURANCE_READ_TOKEN. An admin must provision an appropriately restricted
+read-only credential authorized for the source repositories (contents metadata,
+pull requests, Actions runs/jobs and branch protection as applicable). The
+collector fails closed without that secret. It never fetches source files or
+writes back to GitHub, does not automatically publish snapshot JSON into this
+private static website, and emits a private artifact with seven-day retention.
+The schedule only operates after workflow code is merged to the default branch.
+
+To run the collector locally, from the repo root:
+
+    ASSURANCE_READ_TOKEN=<read-only-secret> node tools/collect-assurance.mjs --strict private-artifacts/assurance-latest.json
+
+Use a secure local secret manager or ephemeral environment variable; never
+commit the token or the resulting metadata. The ignored private-artifacts/
+directory is deliberately excluded from publication. Import the generated
+JSON into the dashboard only after reviewing its completeness and provenance:
+the browser **still treats imported receipts as unverified**. No automated
+evidence promotion is implemented.
+
+The finite-state model suite and optional TLA+ reference modules are documented
+in formal/README.md. The JavaScript checker is a bounded design model only;
+TLA+ TLC execution, unbounded proofs and cross-backend refinement have not
+been verified.
+
+**CI admission limitation:** on Nov 6 the source-only website and assurance
+workflows initially failed with steps=null. Their reruns were requested.
+No claim of successful stepful hosted CI is made until job-step readback proves it.
+
