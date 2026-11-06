@@ -14,7 +14,7 @@ test('all five bounded safety reference models enumerate without violations',()=
   }
 });
 
-test('all known unsafe mutations yield actionable counterexample traces',()=>{
+test('all nine known unsafe mutations yield actionable counterexample traces',()=>{
   let killed=0;
   for(const [name,mutants] of Object.entries(mutationSuite)){
     for(const mutant of mutants){
@@ -25,7 +25,7 @@ test('all known unsafe mutations yield actionable counterexample traces',()=>{
       killed++;
     }
   }
-  assert.equal(killed,8);
+  assert.equal(killed,9);
 });
 
 test('deepening or cutting exploration never promotes a bounded model to guest proof',()=>{
@@ -34,7 +34,7 @@ test('deepening or cutting exploration never promotes a bounded model to guest p
   assert.equal(r.guestExecution,'NOT_EXECUTED');
   assert.equal(r.unboundedProof,false);
   assert.equal(r.refinementProven,false);
-  assert.equal(r.results.filter(x=>x.killed).length,8);
+  assert.equal(r.results.filter(x=>x.killed).length,9);
   assert.equal(r.results.filter(x=>!x.mutant).length,5);
   const short=explore(models.pubsub,{maxDepth:1});
   assert.equal(short.ok,true);
@@ -58,4 +58,11 @@ test('two active readers coexist, but writers cannot overlap or survive rt take 
   assert.equal(stale.ok,false);
   assert.match(stale.violation,/wrong actor ownership/);
   assert.ok(stale.trace.includes('rt-take-owner-to-B'));
+});
+
+test('cancellation cannot retain an undelivered queued publication',()=>{
+  const bad=explore(models.pubsub,{mutant:'retain-cancelled-queue'});
+  assert.equal(bad.ok,false);
+  assert.match(bad.violation,/retained after cancellation/);
+  assert.ok(bad.trace.includes('cancel-subscription'));
 });
