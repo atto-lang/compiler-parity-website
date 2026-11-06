@@ -245,7 +245,7 @@ async function main() {
   console.log('ASSURANCE_METADATA_ONLY '+JSON.stringify({
     records:snapshot.collector.records,complete:snapshot.collector.complete,
     classification:snapshot.collector.completeness,
-    runner_not_admitted:snapshot.prs.filter(p=>stepState(p.workflow&&p.workflow.steps)===OBSERVATION.RUNNER_NOT_ADMITTED).length,
+    runner_not_admitted:snapshot.prs.filter(p=>p.workflow && stepState(p.workflow.steps)===OBSERVATION.RUNNER_NOT_ADMITTED).length,
     independently_verified_guest:0
   }));
   if (strict && snapshot.collector.completeness !== 'METADATA_COLLECTED') process.exitCode = 2;
