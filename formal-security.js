@@ -101,7 +101,7 @@
   }
   function badge(s,type){return '<span class="badge '+e(type||'gray')+'">'+e(s)+'</span>';}
   function mergeGate(p) {
-    if(p.state==='Merged') return 'Merged · guest parity not implied';
+    if(p.state==='Merged') return data.imported ? 'Imported merge claim · not verified' : 'Merged · guest parity not implied';
     if(p.state==='Closed') return 'Closed · no merge proof';
     if(p.state==='Draft') return 'HOLD · draft / review / evidence';
     return 'HOLD · independent gates unverified';
@@ -334,6 +334,7 @@
     el('pageDescription').textContent=titles[view][1];
     el('breadcrumb').textContent=titles[view][0];
     el('snapshotTime').textContent='Captured '+String(data.capturedAt||'unknown').replace('T',' ').replace('Z',' UTC');
+    el('snapshotSource').textContent=data.imported?'Local import · unverified':'GitHub snapshot · not live';
     document.querySelectorAll('[data-view]').forEach(function(b){
       b.classList.toggle('active',b.dataset.view===view);
       if(b.dataset.view===view)b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
@@ -456,6 +457,7 @@
     validate(snapshot);
     var cloned=JSON.parse(JSON.stringify(snapshot));
     // A browser JSON file cannot authenticate a GitHub run or genuine compiler artifact.
+    cloned.source='Unverified local JSON import';cloned.imported=true;
     cloned.prs.forEach(function(p){p.guest='NOT_INDEPENDENTLY_VERIFIED';if(p.workflow)p.workflow.headBound=false;});
     return cloned;
   }
