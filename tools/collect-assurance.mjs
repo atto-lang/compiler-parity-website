@@ -16,15 +16,19 @@ export const MAX_RECORDS = 100;
 export const OBSERVATION = Object.freeze({
   NOT_INSPECTED: 'NOT_INSPECTED',
   RUNNER_NOT_ADMITTED: 'RUNNER_NOT_ADMITTED',
+  STEP_RECORDS_NOT_EXECUTED: 'STEP_RECORDS_NOT_EXECUTED',
+  STEP_COUNT_CLAIMED: 'STEP_COUNT_CLAIMED',
   STEPS_EXECUTED: 'STEPS_EXECUTED'
 });
-
 export function stepState(steps) {
   if (steps === null || steps === 0 || (Array.isArray(steps) && steps.length === 0))
     return OBSERVATION.RUNNER_NOT_ADMITTED;
-  if (Number.isSafeInteger(steps) && steps > 0) return OBSERVATION.STEPS_EXECUTED;
-  if (Array.isArray(steps) && steps.length > 0) return OBSERVATION.STEPS_EXECUTED;
-  return OBSERVATION.NOT_INSPECTED;
+  if (Number.isSafeInteger(steps) && steps > 0) return OBSERVATION.STEP_COUNT_CLAIMED;
+  if (!Array.isArray(steps)) return OBSERVATION.NOT_INSPECTED;
+  const started = steps.some(s => s && typeof s.name === 'string' &&
+    ['completed','in_progress'].includes(s.status) && s.conclusion !== 'skipped' &&
+    typeof s.started_at === 'string' && Number.isFinite(Date.parse(s.started_at)));
+  return started ? OBSERVATION.STEPS_EXECUTED : OBSERVATION.STEP_RECORDS_NOT_EXECUTED;
 }
 
 export function exactSha(value) {
@@ -85,33 +89,41 @@ function pickLatestRun(runs, expectedHead) {
 
 function analyzeJobs(jobs, expectedHead, run) {
   if (!Array.isArray(jobs) || jobs.length === 0) return null;
-  const names = new Set();
-  let duplicate = false;
-  for (const job of jobs) {
-    if (names.has(job.name)) duplicate = true;
-    names.add(job.name);
-  }
-  // Conservative: a "success" badge cannot bind checkout to source head or
-  // compiler execution. Job step metadata alone is at most runner evidence.
-  const withSteps = jobs.filter(j => stepState(j.steps) === OBSERVATION.STEPS_EXECUTED);
-  const selected = withSteps[0] || jobs[0];
-  const rawSteps = selected.steps;
+  if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1)
+    throw new Error('Run attempt not inspected');
+  const names = new Set(), ids = new Set();
+  const audited = jobs.map(job => {
+    if (!job || !Number.isSafeInteger(job.id) || job.id < 1 ||
+        typeof job.name !== 'string' || !job.name || names.has(job.name) ||
+        ids.has(job.id)) throw new Error('Duplicate or invalid job identity');
+    names.add(job.name); ids.add(job.id);
+    const classification = stepState(job.steps);
+    return {
+      id:job.id,name:job.name,attempt:run.run_attempt,
+      status:job.status || 'unknown',conclusion:job.conclusion || 'unknown',
+      steps: job.steps === null ? null : Array.isArray(job.steps) ? job.steps.length : 'UNKNOWN',
+      classification,
+      startedSteps:Array.isArray(job.steps) ?
+        job.steps.filter(s => s && ['completed','in_progress'].includes(s.status) &&
+          s.conclusion !== 'skipped' && typeof s.started_at === 'string' &&
+          Number.isFinite(Date.parse(s.started_at))).length : null,
+      runnerIdPresent:job.runner_id != null,
+      checkoutHeadVerified:false,guestVerified:false
+    };
+  });
+  const selected = audited.find(x => x.classification === OBSERVATION.STEPS_EXECUTED) || audited[0];
   return {
-    run: Number(run.id),
-    job: selected.name || 'Unknown',
-    jobId: Number(selected.id) || null,
-    attempt: Number.isSafeInteger(run.run_attempt) ? run.run_attempt : null,
-    conclusion: selected.conclusion || 'unknown',
-    steps: Array.isArray(rawSteps) ? rawSteps.length : (rawSteps === null ? null : 'UNKNOWN'),
-    phase: stepState(rawSteps) === OBSERVATION.RUNNER_NOT_ADMITTED ? 'runner' : 'unknown',
-    head: exactSha(run.head_sha) ? run.head_sha : null,
-    runHeadMatches: run.head_sha === expectedHead,
-    headBound: false,
-    guest: 'NOT_INDEPENDENTLY_VERIFIED',
-    duplicateJobNames: duplicate,
-    runnerIdPresent: selected.runner_id != null,
-    note: duplicate ? 'Duplicate job names; never promote this receipt' :
-      'Observed job metadata only. Original-head checkout, binary and guest execution are not attested.'
+    run:Number(run.id),job:selected.name,jobId:selected.id,
+    attempt:run.run_attempt,conclusion:selected.conclusion,
+    steps:selected.steps,stepClassification:selected.classification,
+    phase:selected.classification === OBSERVATION.RUNNER_NOT_ADMITTED ? 'runner' : 'unknown',
+    head:exactSha(run.head_sha) ? run.head_sha : null,
+    runHeadMatches:run.head_sha === expectedHead,
+    headBound:false,checkoutHeadVerified:false,
+    guest:'NOT_INDEPENDENTLY_VERIFIED',
+    duplicateJobNames:false,runnerIdPresent:selected.runnerIdPresent,
+    jobs:audited,
+    note:'Run-head metadata only. Original checkout, compiler binary, negative controls and guest execution are not independently attested.'
   };
 }
 
