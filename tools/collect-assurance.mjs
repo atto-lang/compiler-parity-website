@@ -83,7 +83,7 @@ async function tryRead(fn, errors, code) {
 
 function pickLatestRun(runs, expectedHead) {
   if (!Array.isArray(runs)) return null;
-  const checked = runs.filter(r => r && exactSha(r.head_sha) && r.head_sha === expectedHead);
+  const checked = runs.filter(r => r && r.event === 'pull_request' && exactSha(r.head_sha) && r.head_sha === expectedHead);
   checked.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || Number(b.id || 0) - Number(a.id || 0));
   return checked[0] || null;
 }
