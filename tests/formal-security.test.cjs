@@ -70,8 +70,9 @@ const cases=[
   [{steps:0},'RUNNER_NOT_ADMITTED'],
   [{steps:'UNKNOWN'},'NOT_INSPECTED'],
   [{steps:undefined},'NOT_INSPECTED'],
-  [{steps:[{name:'checkout'}]},'STEPS_EXECUTED'],
-  [{steps:2},'STEPS_EXECUTED']
+  [{steps:[{name:'checkout'}]},'STEP_RECORDS_NOT_EXECUTED'],
+  [{steps:[{name:'checkout',status:'completed',started_at:'2026-11-06T00:00:00Z'}]},'STEPS_EXECUTED'],
+  [{steps:2},'STEP_COUNT_CLAIMED']
 ];
 for(const [job,expected] of cases)assert.equal(test.stepClassification(job),expected);
 assert.match(test.mergeGate({state:'Draft'}),/^HOLD/);
@@ -99,5 +100,31 @@ const malicious=copy(seed);malicious.prs[0].title='<img src=x onerror=alert(1)>'
 const rendered=mount('registry',malicious).nodes.view.innerHTML;
 assert.ok(!rendered.includes('<img src=x'),'unescaped imported PR title');
 assert.match(rendered,/&lt;img/);
+const modelSnapshot=copy(seed);
+modelSnapshot.modelReport={
+  classification:'BOUNDED_DESIGN_MODEL_ONLY',
+  guestExecution:'NOT_EXECUTED',
+  results:[
+    {model:'actorBorrow',scope:'BOUNDED_DESIGN_MODEL_ONLY',states:8,edges:13,depthTruncated:false},
+    {model:'actorBorrow',scope:'BOUNDED_DESIGN_MODEL_ONLY',mutant:'write-with-active-reader',
+      killed:true,violation:'write overlaps shared borrow',counterexample:['read','write']}
+  ]
+};
+modelSnapshot.prs[0].workflow={run:99,job:'model',attempt:2,steps:1,headBound:false,
+  stepClassification:'STEPS_EXECUTED',
+  jobs:[
+    {id:1,name:'model',attempt:2,steps:1,classification:'STEPS_EXECUTED'},
+    {id:2,name:'guest',attempt:2,steps:null,classification:'RUNNER_NOT_ADMITTED'}
+  ]};
+const restored=mount('overview',modelSnapshot);
+assert.match(restored.nodes.view.innerHTML,/write-with-active-reader/);
+const inspected=mount('evidence',modelSnapshot);
+assert.match(inspected.nodes.view.innerHTML,/model/);
+assert.match(inspected.nodes.view.innerHTML,/guest/);
+assert.match(inspected.nodes.view.innerHTML,/Guest UNPROVEN/);
+const malformedModel=copy(modelSnapshot);
+malformedModel.modelReport.results[1].counterexample='forged';
+assert.throws(()=>test.parseImport(JSON.stringify(malformedModel)),/Invalid bounded model report/);
+console.log('PASS restored snapshot with expanded jobs and non-promoting model reports');
 console.log('PASS evidence state machine, import rejection, XSS escape, merge gating');
 console.log('PASS source-only dashboard tests; NO compiler-backed AttoLang guest proof');
