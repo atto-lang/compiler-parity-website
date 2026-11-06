@@ -242,7 +242,8 @@
       ['02 · Evidence scope','Model, source and host checks do not establish production refinement or a real .atto guest.'],
       ['03 · Merge control','Draft, requested reviews and mergeable status never substitute for independent approval and fresh CI.']
     ].map(function(x){return '<div class="rule"><strong>'+e(x[0])+'</strong><p>'+e(x[1])+'</p></div>';}).join('')+'</div>';
-    return '<div class="stack">'+
+    var collectionNotice = data.collector ? '<div class="notice">Private API collection: '+e(data.collector.complete)+'/'+e(data.collector.records)+' records with completed metadata reads. '+e(data.collector.completeness)+'. This is metadata only, not independent guest or checkout proof.</div>' : '';
+    return collectionNotice+'<div class="stack">'+
       '<div class="columns">'+
         sectionOpen('Verification funnel','The distance from authored checks to guest evidence',funnel)+
         sectionOpen('Immediate priority queue','Highest-impact unresolved tasks',priorities)+
@@ -374,8 +375,13 @@
       detail('Workflow job',w?w.job+' · '+(w.run||'unknown'):'Not inspected')+
       detail('Observed steps',stepCount(w)+' ('+stepLabel(p)+')')+
       detail('Job attempt',w&&w.attempt!==null?w.attempt:'Not verified')+
+      detail('Run head matches PR',w&&w.runHeadMatches?'API metadata matches; checkout NOT attested':'Not independently verified')+
+      detail('Duplicate workflow jobs',w&&w.duplicateJobNames?'Yes; receipt must be rejected':'Not reported; may be uninspected')+
       detail('Run bound to head/tree',w&&w.headBound?'Claimed only; requires independent verification':'Not verified')+
-      detail('Independent review',p.review)+detail('Merge gate',mergeGate(p))+
+      detail('API collection status',p.metadataStatus||'Curated initial snapshot')+
+      detail('Metadata errors',p.metadataErrors && p.metadataErrors.length ? p.metadataErrors.join('; ') : 'None reported; completeness is not proof')+
+      detail('Independent review',p.review)+detail('Current-head approvals',p.approvalsOnHead===undefined?'Not independently inspected':p.approvalsOnHead)+
+      detail('Merge gate',mergeGate(p))+
       detail('Next step',p.next)+
       '<p style="margin-top:20px"><a class="btn dark" href="'+prUrl(p)+'" target="_blank" rel="noopener noreferrer">Open GitHub pull request ↗</a> '+
       (w?'<a class="btn" href="'+runUrl(p)+'" target="_blank" rel="noopener noreferrer">Open workflow ↗</a>':'')+'</p>';
