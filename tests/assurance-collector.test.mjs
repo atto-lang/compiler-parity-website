@@ -17,13 +17,13 @@ const record={
 function response(payload,status=200){
   return {status,ok:status>=200&&status<300,async json(){return payload;}};
 }
-function fixture({head=HEAD,steps=null,reviews=true,failReview=false,run=true,duplicate=false,missingAttempt=false,incomplete=false}={}){
+function fixture({head=HEAD,steps=null,reviews=true,failReview=false,run=true,duplicate=false,missingAttempt=false,incomplete=false,event='pull_request'}={}){
   const requests=[];
   const routes={
     ['/repos/'+repo+'/pulls/7']:{head:{sha:head},state:'open',draft:true,author_association:'OWNER',title:'Current GitHub PR',base:{ref:'main'},user:{login:'author'}},
     ['/repos/'+repo+'/git/commits/'+head]:{tree:{sha:TREE}},
     ['/repos/'+repo+'/pulls/7/reviews?per_page=100']:reviews?[{user:{login:'different-reviewer'},state:'APPROVED',commit_id:head,submitted_at:'2026-11-06T00:00:00Z'}]:[],
-    ['/repos/'+repo+'/actions/runs?head_sha='+head+'&event=pull_request&per_page=100']:{workflow_runs:run?[{id:45,head_sha:head,run_attempt:missingAttempt?null:2,event:'pull_request',created_at:'2026-11-06T00:01:00Z'}]:[],total_count:run?1:0},
+    ['/repos/'+repo+'/actions/runs?head_sha='+head+'&event=pull_request&per_page=100']:{workflow_runs:run?[{id:45,head_sha:head,run_attempt:missingAttempt?null:2,event,created_at:'2026-11-06T00:01:00Z'}]:[],total_count:run?1:0},
     ['/repos/'+repo+'/actions/runs/45/attempts/2/jobs?per_page=100']:{jobs:duplicate?[
       {id:101,name:'compile',conclusion:'failure',steps,runner_id:null},
       {id:102,name:'compile',conclusion:'success',steps,runner_id:8}
@@ -131,6 +131,13 @@ test('duplicate job identities and truncated job lists fail closed',async()=>{
 });
 test('missing exact run attempt cannot manufacture stepful evidence',async()=>{
   const result=await collectRecord(fixture({missingAttempt:true}).api,record);
+  assert.equal(result.workflow,null);
+  assert.equal(result.metadataStatus,'INCOMPLETE');
+  assert.equal(result.guest,'NOT_INDEPENDENTLY_VERIFIED');
+});
+
+test('non-PR workflows cannot prove PR tests even when their head matches',async()=>{
+  const result=await collectRecord(fixture({event:'workflow_dispatch'}).api,record);
   assert.equal(result.workflow,null);
   assert.equal(result.metadataStatus,'INCOMPLETE');
   assert.equal(result.guest,'NOT_INDEPENDENTLY_VERIFIED');
