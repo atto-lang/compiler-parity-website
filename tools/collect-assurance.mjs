@@ -150,6 +150,10 @@ export async function collectRecord(api, initial) {
   p.workflow = null;
   p.review = 'Current submitted independent approval not verified';
   p.approvalsOnHead = 0;
+  p.mergeReady = false;
+  p.compilerGuestVerified = false;
+  p.runnerCheckoutVerified = false;
+  p.proof = null;
   const base = '/repos/' + encodeRepo(p.repo);
   const pull = await tryRead(() => api.get(base+'/pulls/'+Number(p.number)), errors, 'PULL');
   if (!pull || !exactSha(pull.head && pull.head.sha)) {
@@ -174,25 +178,39 @@ export async function collectRecord(api, initial) {
   const [gitCommit, reviews, runs, protection] = await Promise.all([
     tryRead(() => api.get(base+'/git/commits/'+encodeURIComponent(head)), errors, 'TREE'),
     tryRead(() => api.get(base+'/pulls/'+Number(p.number)+'/reviews?per_page=100'), errors, 'REVIEWS'),
-    tryRead(() => api.get(base+'/actions/runs?head_sha='+encodeURIComponent(head)+'&per_page=50'), errors, 'RUNS'),
+    tryRead(() => api.get(base+'/actions/runs?head_sha='+encodeURIComponent(head)+'&event=pull_request&per_page=100'), errors, 'RUNS'),
     tryRead(() => api.get(base+'/branches/'+encodeURIComponent((pull.base&&pull.base.ref)||'main')+'/protection',{optional404:true}), errors, 'PROTECTION')
   ]);
   if (gitCommit && exactSha(gitCommit.tree && gitCommit.tree.sha)) {
     p.tree = gitCommit.tree.sha;
     p.treeSource = 'GitHub API git/commits/{head} metadata';
   } else errors.push('TREE: Full root tree not independently resolved');
-  p.approvalsOnHead = approvedReviewCount(reviews, p.author, head);
+  if (Array.isArray(reviews) && reviews.length === 100) {
+    errors.push('REVIEWS: Page full; approvals cannot be independently certified');
+    p.approvalsOnHead = 0;
+  } else p.approvalsOnHead = approvedReviewCount(reviews, p.author, head);
   p.review = p.approvalsOnHead > 0 ? 'Submitted independent review matched current head (API metadata)' : 'No submitted independent APPROVED review on current head';
   // null protection with 404 could be unprotected or unauthorized; never
   // display that condition as a proven protected branch.
   p.protectionVerified = Boolean(protection && protection.enabled !== false);
   p.protectionNote = p.protectionVerified ? 'Protection API policy returned; enforcement must be assessed per rule' : 'Not independently verified protected';
+  if (runs && runs.total_count > 100)
+    errors.push('RUNS: More than one page; readback incomplete');
   const run = pickLatestRun(runs && runs.workflow_runs, head);
-  if (run) {
-    const jobsResponse = await tryRead(() => api.get(base+'/actions/runs/'+Number(run.id)+'/jobs?filter=latest&per_page=100'), errors, 'JOBS');
-    p.workflow = analyzeJobs(jobsResponse && jobsResponse.jobs, head, run);
-    if (!p.workflow) errors.push('JOBS: No independently inspected job steps');
-  } else errors.push('RUNS: No run with an exact matching run-head SHA was found');
+  if (run && Number.isSafeInteger(run.id) && run.id > 0) {
+    if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1)
+      errors.push('ATTEMPT: Current run attempt not inspected');
+    else {
+      const jobsResponse = await tryRead(() => api.get(base+'/actions/runs/'+run.id+
+        '/attempts/'+run.run_attempt+'/jobs?per_page=100'), errors, 'JOBS');
+      if (jobsResponse && Array.isArray(jobsResponse.jobs) &&
+          (jobsResponse.jobs.length === 100 || jobsResponse.total_count > jobsResponse.jobs.length))
+        errors.push('JOBS: Pagination incomplete; no fully audited job set');
+      else try { p.workflow = analyzeJobs(jobsResponse && jobsResponse.jobs, head, run); }
+      catch(err) { errors.push('JOBS: Invalid/duplicate job identity or run attempt'); }
+      if (!p.workflow) errors.push('JOBS: No trustworthy job-step inspection');
+    }
+  } else errors.push('RUNS: No exact matching pull-request run-head SHA found');
   p.metadataStatus = errors.length ? 'INCOMPLETE' : 'COLLECTED_METADATA_ONLY';
   p.metadataErrors = errors;
   // Review, status, and run-head matching alone can never set guest proof.
