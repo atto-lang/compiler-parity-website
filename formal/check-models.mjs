@@ -112,7 +112,7 @@ export const models = {
           queue:mutant==='stale-queue'?s.queue:null
         })));
       }
-      if(!s.cancel)next.push(record('cancel-subscription',changed(s,{cancel:true,queue:null})));
+      if(!s.cancel)next.push(record('cancel-subscription',changed(s,{cancel:true,queue:mutant==='retain-cancelled-queue'?s.queue:null})));
       return next;
     },
     violation(s){
@@ -181,7 +181,7 @@ export const mutationSuite = Object.freeze({
   actor:['foreign-writer'],
   actorBorrow:['write-with-active-reader','stale-writer-after-take'],
   cancellation:['lost-wakeup','double-completion'],
-  pubsub:['early-ack','stale-queue'],
+  pubsub:['early-ack','stale-queue','retain-cancelled-queue'],
   hotreload:['retain-stale-ticket']
 });
 
