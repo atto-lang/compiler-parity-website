@@ -379,7 +379,7 @@
       detail('Duplicate workflow jobs',w&&w.duplicateJobNames?'Yes; receipt must be rejected':'Not reported; may be uninspected')+
       detail('Run bound to head/tree',w&&w.headBound?'Claimed only; requires independent verification':'Not verified')+
       detail('API collection status',p.metadataStatus||'Curated initial snapshot')+
-      detail('Metadata errors',p.metadataErrors && p.metadataErrors.length ? p.metadataErrors.join('; ') : 'None reported; completeness is not proof')+
+      detail('Metadata errors',Array.isArray(p.metadataErrors) && p.metadataErrors.length ? p.metadataErrors.join('; ') : 'None reported; completeness is not proof')+
       detail('Independent review',p.review)+detail('Current-head approvals',p.approvalsOnHead===undefined?'Not independently inspected':p.approvalsOnHead)+
       detail('Merge gate',mergeGate(p))+
       detail('Next step',p.next)+
