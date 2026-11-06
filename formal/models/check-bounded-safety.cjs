@@ -74,7 +74,7 @@ function pubTransitions(s, mutant){
     if(s.open && !s.cancelled[i])
       add('cancel-publisher-'+i,t=>{
         t.cancelled[i]=true;
-        if(t.queue && t.queue.publisher===i)t.queue=null;
+        if(t.queue && t.queue.publisher===i && mutant!=='retain-cancelled-queue')t.queue=null;
       });
   }
   if(s.queue && s.queue.generation===s.generation) {
@@ -128,7 +128,8 @@ function verificationReport(){
     {model:'actor write/read exclusion',mutant:'allow-write-during-read',result:actorModel('allow-write-during-read')},
     {model:'actor generation fencing',mutant:'allow-stale-writer',result:actorModel('allow-stale-writer')},
     {model:'reliable publish ACK safety',mutant:'early-ack',result:pubModel('early-ack')},
-    {model:'pub-sub subscription generation',mutant:'retain-old-queue',result:pubModel('retain-old-queue')}
+    {model:'pub-sub subscription generation',mutant:'retain-old-queue',result:pubModel('retain-old-queue')},
+    {model:'backpressured cancellation release',mutant:'retain-cancelled-queue',result:pubModel('retain-cancelled-queue')}
   ];
   const models=[actor,pubsub];
   const success=models.every(x=>x.result==='BOUNDED_SAFETY_HOLDS') &&
