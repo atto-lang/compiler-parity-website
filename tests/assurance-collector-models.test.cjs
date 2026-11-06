@@ -40,7 +40,7 @@ function makeFixture({steps=null,runHead=A,withReview=true,duplicate=false,
         submitted_at:'2026-11-06T20:01:00Z'}] : []);
     if(path===base+'/branches/main/protection')
       return protectionDenied ? response({message:'forbidden'},403) :
-        response({required_pull_request_reviews:{},required_status_checks:{});
+        response({required_pull_request_reviews:{},required_status_checks:{}});
     if(path.startsWith(base+'/actions/runs?'))
       return response({total_count:1,workflow_runs:[
         {id:33,head_sha:runHead,event:'pull_request',run_attempt:missingAttempt?null:2,
