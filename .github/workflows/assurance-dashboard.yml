@@ -1,0 +1,36 @@
+name: Assurance dashboard source-only checks
+on:
+  pull_request:
+    paths:
+      - 'formal-security.html'
+      - 'formal-security.css'
+      - 'formal-security.js'
+      - 'formal-data.js'
+      - 'tests/formal-security.test.cjs'
+      - '.github/workflows/assurance-dashboard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-only-smoke:
+    name: static-site-source-only-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax
+        run: |
+          node --check formal-data.js
+          node --check formal-security.js
+          node --check tests/formal-security.test.cjs
+      - name: Run fail-closed dashboard unit tests
+        run: node tests/formal-security.test.cjs
+      - name: Guard existing engineering dashboard
+        run: node tests/smoke.cjs
+      - name: Scope warning
+        run: echo "SOURCE_ONLY dashboard smoke. This does NOT execute AttoLang compilers, guest binaries, model checkers, or backend conformance."
