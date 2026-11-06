@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {models,explore,mutationSuite,verifyAll} from '../formal/check-models.mjs';
 
-test('all four bounded safety reference models enumerate without violations',()=>{
-  assert.deepEqual(Object.keys(models).sort(),['actor','cancellation','hotreload','pubsub']);
+test('all five bounded safety reference models enumerate without violations',()=>{
+  assert.deepEqual(Object.keys(models).sort(),['actor','actorBorrow','cancellation','hotreload','pubsub']);
   for(const [name,model] of Object.entries(models)){
     const r=explore(model);
     assert.equal(r.ok,true,name);
@@ -25,7 +25,7 @@ test('all known unsafe mutations yield actionable counterexample traces',()=>{
       killed++;
     }
   }
-  assert.equal(killed,6);
+  assert.equal(killed,8);
 });
 
 test('deepening or cutting exploration never promotes a bounded model to guest proof',()=>{
@@ -34,8 +34,8 @@ test('deepening or cutting exploration never promotes a bounded model to guest p
   assert.equal(r.guestExecution,'NOT_EXECUTED');
   assert.equal(r.unboundedProof,false);
   assert.equal(r.refinementProven,false);
-  assert.equal(r.results.filter(x=>x.killed).length,6);
-  assert.equal(r.results.filter(x=>!x.mutant).length,4);
+  assert.equal(r.results.filter(x=>x.killed).length,8);
+  assert.equal(r.results.filter(x=>!x.mutant).length,5);
   const short=explore(models.pubsub,{maxDepth:1});
   assert.equal(short.ok,true);
   assert.equal(short.depthTruncated,true);
@@ -44,4 +44,18 @@ test('deepening or cutting exploration never promotes a bounded model to guest p
 test('bounded explorer rejects invalid/inconclusive resource bounds',()=>{
   assert.throws(()=>explore(null),/Invalid model/);
   assert.throws(()=>explore(models.pubsub,{maxStates:1}),/State bound exceeded/);
+});
+
+test('two active readers coexist, but writers cannot overlap or survive rt take generation',()=>{
+  const safe=explore(models.actorBorrow);
+  assert.equal(safe.ok,true);
+  assert.equal(safe.depthTruncated,false);
+  assert.ok(safe.states>=8);
+  const writerOverlap=explore(models.actorBorrow,{mutant:'write-with-active-reader'});
+  assert.equal(writerOverlap.ok,false);
+  assert.match(writerOverlap.violation,/write overlaps shared borrow/);
+  const stale=explore(models.actorBorrow,{mutant:'stale-writer-after-take'});
+  assert.equal(stale.ok,false);
+  assert.match(stale.violation,/wrong actor ownership/);
+  assert.ok(stale.trace.includes('rt-take-owner-to-B'));
 });
