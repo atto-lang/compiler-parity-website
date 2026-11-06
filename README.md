@@ -71,3 +71,26 @@ You can host this repository on GitHub Pages, Cloudflare Pages, Netlify or any s
 ## License
 
 This generated dashboard is provided for your internal engineering workflow. No third-party UI libraries are bundled.
+## Formal-methods and security assurance
+
+Open [formal-security.html](formal-security.html) for the new dedicated formal-methods, security and repository-hardening site. It links back to the original engineering dashboard. Both are dependency-free static pages; this route uses its own data and browser state to avoid breaking the existing parity views.
+
+The initial **point-in-time snapshot from 2026-11-06** contains 12 curated PRs across the platform-conformance, Java, LLVM, .NET, Wasm and Forge repositories, nine invariant/threat contracts, nine reusable formalization templates, and 12 P0–P2 hardening tasks. It is a **subset, not a complete scan** and does not live-poll GitHub. The snapshot includes full PR head SHAs and only known root-tree values, explicitly labeling a PR-described tree as not independently verified. Some runs and attempts were not inspected.
+
+The interface provides six views: command overview, repository/PR registry, threats/invariants, workflow evidence, prioritized work queues and formal-specification templates. Shared filters cover repository, backend, PR, invariant, evidence class, severity, status and text search. Click a PR/invariant/task to inspect its threat, formal evidence, mutation coverage, known run, and next merge gate. Task status changes are browser-local only. JSON import/export and filtered CSV work offline without exposing a GitHub token.
+
+### Non-promoting evidence rules
+
+- `steps=[]`, `steps=null`, or numeric zero means **runner admission not established**; never call that compiler failure or successful execution.
+- An uninspected workflow conclusion is **not inspected**, not automatically a zero-step run.
+- A stepful run only establishes observed runner steps; the site does not infer what tests ran.
+- Authored fixtures, reported local bounded models, local host-only tests, and source-free CI are not compiler-backed guest proof.
+- Imported JSON is untrusted. The import routine resets guest execution claims to `NOT_INDEPENDENTLY_VERIFIED` and removes any claimed run-to-head binding. This static browser does not authenticate GitHub metadata, signatures, compiler binaries, source trees or independent reviews.
+- Merged source-only work does not imply feature parity; no seeded PR is independently guest-certified or declared merge-ready.
+- For CI portability, a real guest proof needs independently audited repo/head/tree/fixture blobs, run/attempt/job and positive steps, compiler digest, link/AOT output where applicable, native guest trace/exit, negative controls and independent review. Author controls cannot approve their own PR.
+
+### Local validation and scope
+
+Run `node --check formal-data.js`, `node --check formal-security.js` and `node tests/formal-security.test.cjs` with Node 22+. The dedicated workflow `.github/workflows/assurance-dashboard.yml` also runs the original site smoke test. These are **source-only site checks**, not AttoLang model-checker execution, compiler tests or five-backend guest parity.
+
+The repository is private. **Do not enable public Pages/hosting without an explicit private-metadata and access review.** The site has no live GitHub credentials, server API, background agent or merge/approval controls. Refresh the snapshot through an authorized and independently audited ingestion pipeline before relying on it for operational approvals.
