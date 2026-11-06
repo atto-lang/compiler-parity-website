@@ -6,7 +6,10 @@ on:
       - 'formal-security.css'
       - 'formal-security.js'
       - 'formal-data.js'
+      - 'formal/models/**'
+      - 'bin/collect-assurance-evidence.cjs'
       - 'tests/formal-security.test.cjs'
+      - 'tests/assurance-collector-models.test.cjs'
       - '.github/workflows/assurance-dashboard.yml'
   workflow_dispatch:
 permissions:
@@ -15,11 +18,32 @@ jobs:
   source-only-smoke:
     name: static-site-source-only-smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - name: Exact-head checkout (not PR synthetic merge ref)
+        uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Verify exact checkout Git head and tree
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_HEAD="$(git rev-parse HEAD)"
+          ACTUAL_TREE="$(git rev-parse HEAD^{tree})"
+          test "$ACTUAL_HEAD" = "$EXPECTED_HEAD"
+          test "${#ACTUAL_TREE}" -eq 40
+          mkdir -p artifacts
+          EXPECTED_HEAD="$EXPECTED_HEAD" ACTUAL_TREE="$ACTUAL_TREE" node -e '
+          const fs=require("node:fs");
+          const c={evidence:"SOURCE_ONLY_RUNNER_CHECKOUT",guest:"NOT_EXECUTED",
+            expectedHead:process.env.EXPECTED_HEAD,rootTree:process.env.ACTUAL_TREE,
+            runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,
+            jobName:process.env.GITHUB_JOB,source:"git rev-parse on original PR checkout"};
+          fs.writeFileSync("artifacts/assurance-checkout.json",JSON.stringify(c,null,2)+"\n");
+          '
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -27,10 +51,32 @@ jobs:
         run: |
           node --check formal-data.js
           node --check formal-security.js
+          node --check bin/collect-assurance-evidence.cjs
+          node --check formal/models/check-bounded-safety.cjs
           node --check tests/formal-security.test.cjs
-      - name: Run fail-closed dashboard unit tests
+          node --check tests/assurance-collector-models.test.cjs
+      - name: Run source-only dashboard tests
         run: node tests/formal-security.test.cjs
-      - name: Guard existing engineering dashboard
+      - name: Run read-only collector and mutation regression tests
+        run: node --test tests/assurance-collector-models.test.cjs
+      - name: Exhaust bounded design safety models and kill mutants
+        run: |
+          node formal/models/check-bounded-safety.cjs > artifacts/assurance-model-results.json
+          node -e '
+          const a=require("./artifacts/assurance-model-results.json");
+          if(a.classification!=="BOUNDED_DESIGN_MODEL_ONLY" || a.success!==true) process.exit(1);
+          '
+      - name: Guard original engineering command center
         run: node tests/smoke.cjs
-      - name: Scope warning
-        run: echo "SOURCE_ONLY dashboard smoke. This does NOT execute AttoLang compilers, guest binaries, model checkers, or backend conformance."
+      - name: Upload source-only receipts (never guest proof)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-only-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/assurance-checkout.json
+            artifacts/assurance-model-results.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Evidence boundary
+        run: echo "SOURCE_ONLY + BOUNDED_DESIGN_MODEL. NO AttoLang compiler, JIT, AOT, guest or production conformance."
