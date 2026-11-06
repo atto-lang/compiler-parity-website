@@ -141,6 +141,8 @@ export async function collectRecord(api, initial) {
   const base = '/repos/' + encodeRepo(p.repo);
   const pull = await tryRead(() => api.get(base+'/pulls/'+Number(p.number)), errors, 'PULL');
   if (!pull || !exactSha(pull.head && pull.head.sha)) {
+    p.evidence = 'SOURCE_ONLY';
+    p.mergeReady = false;
     p.formal = 'STALE UNVERIFIED SOURCE: ' + String(initial.formal || '');
     p.metadataErrors = errors.length ? errors : ['Missing exact PR head'];
     return p;
