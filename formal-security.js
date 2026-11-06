@@ -520,7 +520,8 @@
     var cloned=JSON.parse(JSON.stringify(snapshot));
     // A browser JSON file cannot authenticate a GitHub run or genuine compiler artifact.
     cloned.source='Unverified local JSON import';cloned.imported=true;
-    cloned.prs.forEach(function(p){p.guest='NOT_INDEPENDENTLY_VERIFIED';if(p.workflow)p.workflow.headBound=false;});
+    cloned.prs.forEach(function(p){p.guest='NOT_INDEPENDENTLY_VERIFIED';if(p.workflow){p.workflow.headBound=false;p.workflow.checkoutHeadVerified=false;}});
+    if(cloned.modelReport){cloned.modelReport.guestExecution='NOT_EXECUTED';cloned.modelReport.unboundedProof=false;cloned.modelReport.refinementProven=false;cloned.modelReport.provenance='UNVERIFIED_BROWSER_IMPORT';}
     return cloned;
   }
   document.getElementById('nav').addEventListener('click',function(ev){
