@@ -225,6 +225,28 @@
   function priorityRow(t,i){
     return '<div class="signal"><div class="signal-n">'+(i+1)+'</div><div><button class="linkish" data-open-task="'+e(t.id)+'">'+e(t.title)+'</button><p>'+e(t.kind)+' · '+e(t.prId)+' · '+e(nameFor(t.invariant))+'</p></div>'+badge(t.priority,t.priority==='P0'?'red':'amber')+'</div>';
   }
+  function renderModelSummary(){
+    var report=data.modelReport;
+    if(!report || report.classification!=='BOUNDED_DESIGN_MODEL_ONLY' ||
+       !Array.isArray(report.models) || !Array.isArray(report.negativeControls)){
+      return '<div class="panel-body"><div class="notice">No executed formal-model report is attached to this snapshot. Authored formal specifications and source-only PR descriptions do not count as model-checker execution.</div></div>';
+    }
+    var baseline=report.models.map(function(m){
+      return '<div class="signal"><div class="signal-n">◇</div><div><strong>'+e(m.model)+'</strong>'+
+        '<p>'+e(m.result)+' · '+e(m.states)+' reachable states · '+e(m.edges)+' transitions'+
+        ' · bounded design model, not production or guest refinement</p></div>'+
+        badge('Model only','amber')+'</div>';
+    }).join('');
+    var mutants=report.negativeControls.map(function(n){
+      return '<div class="signal"><div class="signal-n">×</div><div><strong>'+e(n.mutant)+'</strong>'+
+        '<p>'+e(n.result&&n.result.violation)+' · shortest recorded witness: '+
+        e(n.result&&Array.isArray(n.result.trace)?n.result.trace.join(' → '):'unavailable')+'</p></div>'+
+        badge(n.result&&n.result.result==='COUNTEREXAMPLE'?'Counterexample':'Unproven','red')+'</div>';
+    }).join('');
+    return '<div class="panel-body"><div class="notice">Imported model-checker output is a local claim unless independently audited against the exact source blob and executed CI job. Even genuine bounded results prove neither liveness nor real AttoLang guest behavior.</div>'+
+      '<div class="columns equal"><div><div class="section-label">Bounded safety exploration</div><div class="signal-list">'+baseline+'</div></div>'+
+      '<div><div class="section-label">Intentionally unsafe mutant witnesses</div><div class="signal-list">'+mutants+'</div></div></div></div>';
+  }
   function renderOverview(){
     var ps=visiblePrs(), total=ps.length, count=function(pred){return ps.filter(pred).length;};
     var bars=[
@@ -247,6 +269,7 @@
         sectionOpen('Verification funnel','The distance from authored checks to guest evidence',funnel)+
         sectionOpen('Immediate priority queue','Highest-impact unresolved tasks',priorities)+
       '</div>'+
+      sectionOpen('Executable bounded design models','Source-only safety checker output and mutation counterexamples',renderModelSummary())+
       sectionOpen('Five-backend evidence map','Coverage describes source/model/host state; it never certifies guest parity','<div class="panel-body">'+renderMatrix()+'</div>')+
       sectionOpen('Non-negotiable acceptance gates','Proof promotion rules are deliberately strict','<div class="panel-body">'+policy+'</div>')+
     '</div>';
@@ -267,7 +290,7 @@
   function renderRegistry(){
     var ps=visiblePrs();
     var head='<thead><tr><th>Repository / PR</th><th>Backend</th><th>Severity</th><th>Invariant mapping</th><th>Head / tree</th><th>Evidence class</th><th>Workflow</th><th>PR state</th></tr></thead>';
-    return '<div class="notice">A Git commit head is not the same as a verified root Git tree. A tree value marked * is quoted from a PR description and has not been independently read back. No seeded PR is independently certified merge-ready.</div>'+
+    return '<div class="notice">Git commit heads and root trees require different provenance checks. Seeded tree values may be PR-description claims; collector tree values are GitHub API readback claims until independently authenticated. Runner checkout, guest execution and merge readiness are separate gates.</div>'+
       sectionOpen('Mapped repository portfolio',ps.length+' PR records in the filtered snapshot','<div class="table-scroll"><table class="data-table">'+head+'<tbody>'+registryRows()+'</tbody></table>'+(ps.length?'':noRows())+'</div>');
   }
   function renderInvariants(){
@@ -281,23 +304,44 @@
     }).join(''):noRows())+'</div>';
   }
   function renderEvidence(){
-    var ps=visiblePrs();
-    var rows=ps.map(function(p){
-      var w=p.workflow, cls=stepClassification(w), note=cls==='RUNNER_NOT_ADMITTED'?'Runner admission evidence, not compiler failure':
-        cls==='STEPS_EXECUTED'?'Executed steps only; inspect test scope':'No job-step evidence inspected';
-      return '<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
-        '<td>'+(w?'<a href="'+runUrl(p)+'" target="_blank" rel="noopener noreferrer">'+e(w.run)+'</a>':'Not inspected')+'</td>'+
-        '<td>'+e(w&&w.job?w.job:'—')+'</td><td class="mono">'+e(w&&w.attempt!==null?w.attempt:'Unknown')+'</td>'+
-        '<td>'+e(stepCount(w))+'</td><td>'+stepBadge(p)+'</td>'+
-        '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+'</span><div class="sub-cell">Run-head bound: '+(w&&w.headBound?'Claimed, requires independent audit':'no')+'</div></td>'+
-        '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>';
-    }).join('');
-    return '<div class="notice"><strong>Scope boundary:</strong> even a successful workflow conclusion does not establish that the original PR head was checked out or that compiler→IR/CIL/Wasm→link/AOT→guest actually ran. This site cannot independently authenticate imported JSON or artifact signatures.</div>'+
-      '<div class="stack">'+sectionOpen('Workflow evidence ledger','Job steps, attempts, exact-head provenance and guest classification','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Observed steps</th><th>Admission</th><th>Source head</th><th>Guest claim</th></tr></thead><tbody>'+rows+'</tbody></table>'+(ps.length?'':noRows())+'</div>')+
+    var ps=visiblePrs(), jobRows=[];
+    ps.forEach(function(p){
+      var runs=p.verification&&Array.isArray(p.verification.runs)?p.verification.runs:[];
+      var expanded=[];
+      runs.forEach(function(run){
+        if(!run || !Array.isArray(run.jobs))return;
+        run.jobs.forEach(function(job){expanded.push({run:run,job:job});});
+      });
+      if(!expanded.length)expanded.push({run:null,job:null});
+      expanded.forEach(function(entry){
+        var w=p.workflow, job=entry.job, run=entry.run;
+        var count=job?job.observedSteps:stepCount(w);
+        var classified=job?job.class:stepClassification(w);
+        var label=classified==='RUNNER_NOT_ADMITTED'?'Runner not admitted':
+          classified==='STEPS_OBSERVED'?'Steps observed · guest unknown':
+          classified==='STEP_RECORDS_NOT_EXECUTED'?'No executed step observed':
+          classified==='STEPS_EXECUTED'?'Steps claimed · scope unknown':'Not inspected';
+        var note=classified==='RUNNER_NOT_ADMITTED'?'No runner execution; not compiler failure':
+          classified==='STEPS_OBSERVED'?'API step readback; checkout and compiler unproven':
+          'No positive compiler-backed guest evidence';
+        var runId=run?run.run:(w&&w.run);
+        var jobName=job?job.name:(w&&w.job);
+        var attempt=run?run.attempt:(w&&w.attempt);
+        jobRows.push('<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
+          '<td>'+(runId?'<a href="https://github.com/'+encodeURI(p.repo)+'/actions/runs/'+e(runId)+'" target="_blank" rel="noopener noreferrer">'+e(runId)+'</a>':'Not inspected')+'</td>'+
+          '<td>'+e(jobName||'—')+'</td><td class="mono">'+e(attempt||'Unknown')+'</td>'+
+          '<td>'+e(count)+'</td><td>'+badge(label,classified==='RUNNER_NOT_ADMITTED'?'red':classified==='STEPS_OBSERVED'?'amber':'gray')+'</td>'+
+          '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+'</span><div class="sub-cell">Git readback: '+
+          (p.verification&&p.verification.headReadback?'claimed API':'not verified')+' · checkout: unverified</div></td>'+
+          '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>');
+      });
+    });
+    return '<div class="notice"><strong>Scope boundary:</strong> GitHub API source-head and tree metadata are not proof of the runner checkout. Source-only, host and bounded design model checks do not establish guest parity; browser-imported JSON cannot authenticate run/job records.</div>'+
+      '<div class="stack">'+sectionOpen('Workflow evidence ledger','Expanded per run attempt and job when the read-only collector included details','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Executed steps</th><th>Admission</th><th>Head / checkout</th><th>Guest claim</th></tr></thead><tbody>'+jobRows.join('')+'</tbody></table>'+(jobRows.length?'':noRows())+'</div>')+
       sectionOpen('Evidence promotion ladder','Never infer a stronger class from a weaker artifact','<div class="panel-body"><div class="receipt-policy">'+
-        [['Source-authored','Specification, .atto fixture and test file exist; no execution implied.'],
-         ['Model / host executed','A finite model or standalone host test ran; no production refinement implied.'],
-         ['Compiler-backed guest','Requires independent job/attempt/head/tree/blob, compiler digest, actual link/AOT and guest stdout/exit. None certified here.']].map(function(x){return '<div class="rule"><strong>'+e(x[0])+'</strong><p>'+e(x[1])+'</p></div>';}).join('')+
+        [['Source-authored','A specification, .atto fixture or source-only CI test exists; no execution implied.'],
+         ['Model / host executed','A model or standalone host test ran; no production refinement or compiler execution implied.'],
+         ['Compiler-backed guest','Requires independently audited job/attempt/head/tree/blob, compiler digest, link/AOT when applicable, guest stdout/exit and negatives. None certified here.']].map(function(x){return '<div class="rule"><strong>'+e(x[0])+'</strong><p>'+e(x[1])+'</p></div>';}).join('')+
       '</div></div>')+'</div>';
   }
   function renderQueue(){
@@ -367,6 +411,13 @@
       detail('Backend',p.backend)+detail('Severity',p.severity)+
       detail('Head SHA',p.head)+detail('Root tree',p.tree||'Not verified')+
       detail('Tree source',p.treeSource)+
+      detail('Read-only API head/tree check',p.verification&&p.verification.headReadback&&p.verification.rootTreeReadback?'Collector readback claim; browser not authenticated':'Not verified')+
+      detail('Runner checkout', 'NOT VERIFIED by metadata collector')+
+      detail('Compiler guest execution','NOT INDEPENDENTLY VERIFIED')+
+      detail('Branch protection',p.verification&&p.verification.branchProtection||'Not verified')+
+      detail('Independent head approval',p.verification&&p.verification.approval&&p.verification.approval.status||'Not verified')+
+      detail('Workflow audit completeness',p.verification&&p.verification.allRunsInspected===true?'Selected run set inspected; not compiler proof':'Not complete / not inspected')+
+
       detail('Mapped invariants',p.invariants.map(nameFor).join('; '))+
       detail('Threat model',p.threat)+detail('Formal spec / model',p.formal)+
       detail('Properties',p.properties)+detail('Mutation tests',p.mutation)+
