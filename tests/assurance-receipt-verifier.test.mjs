@@ -236,3 +236,42 @@ test('required checkout and real execution step names cannot be relaxed by pin',
     f.pin.requiredSteps=[JAVA_TEST];
   });
 });
+
+test('wrong workflow file or ID cannot launder a green job into TLC/Java evidence',async()=>{
+  await denied(f=>{f.pin.workflowPath='.github/workflows/unsafe.yml'});
+  await denied(f=>{f.pin.workflowId=0});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].path='.github/workflows/other.yml'});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].workflow_id=999});
+  await denied(f=>{
+    asJava(f);
+    f.payloads[f.base+'/actions/runs/45'].path='.github/workflows/assurance-tlc.yml';
+  });
+});
+test('workflow PR association and source repository/tree are mandatory',async()=>{
+  await denied(f=>{delete f.payloads[f.base+'/actions/runs/45'].pull_requests});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].pull_requests=[]});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].pull_requests=[{number:7}]});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].repository.full_name='attacker/other'});
+  await denied(f=>{f.payloads[f.base+'/actions/runs/45'].head_commit.tree_id='a'.repeat(40)});
+});
+test('job must independently match run ID, attempt, head, check-run URL and assigned runner',async()=>{
+  const path='/actions/runs/45/attempts/2/jobs?per_page=100';
+  for(const [field,value] of [
+    ['run_id',46],['run_attempt',1],['head_sha','a'.repeat(40)],
+    ['check_run_url','https://api.github.com/repos/example-org/private-project/check-runs/999'],
+    ['runner_name',''],['runner_name',null]
+  ])await denied(f=>{f.payloads[f.base+path].jobs[0][field]=value});
+});
+test('step order and failure regardless of continue-on-error cannot count',async()=>{
+  const path='/actions/runs/45/attempts/2/jobs?per_page=100';
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps.reverse()});
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps[0].number=2});
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps[1].number=0});
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps[1].number=1});
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps[1].conclusion='failure'});
+  await denied(f=>{f.payloads[f.base+path].jobs[0].steps[1].status='in_progress'});
+  await denied(f=>{
+    const steps=f.payloads[f.base+path].jobs[0].steps;
+    steps.push({...step('Adversarial continue-on-error failure'),number:3,conclusion:'failure'});
+  });
+});
