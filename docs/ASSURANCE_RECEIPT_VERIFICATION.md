@@ -205,3 +205,24 @@ Native Image behavior, or runtime refinement.
 The verifier fails closed; do not bypass a failure by relaxing exact-head,
 runner-step or tool-hash constraints. All tests/fixtures in a PR are untrusted
 until independently reviewed.
+
+## Eight-suite Java Surefire evidence
+
+The Java/GraalVM source workflow archives **all eight Surefire XML suites**
+that the canonical `VerifyAssuranceSurefire.java` checked, together with
+`surefire-xml-sha256.txt`. The independent verifier requires exactly
+the expected eight XML filenames, unique complete manifest entries,
+matching XML bytes and structural validation of each suite via
+`tools/VerifyArtifactGuestSurefire.java` in trusted Java 21 source-file mode.
+It requires all 33 specifically named safety tests across the five
+named-gate suites, plus nonempty passing results for each of the three
+additional suites. The canonical guest suite requires exactly its eight
+method names, not merely `tests="8"` in an XML attribute.
+
+The evidence gate rejects missing borrow/critical reports, partial suites,
+duplicate testcases, unexpected or skipped/error nodes, XML external
+entities, and reporter-supplied hashes that disagree with archived bytes.
+This is **candidate-only** evidence: a malicious producer can fabricate a
+structurally consistent ZIP, so actual runner allocation and independently
+reviewed compiler/guest traces are still required.
+
