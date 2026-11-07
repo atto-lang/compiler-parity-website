@@ -54,6 +54,17 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
+      - name: Independently verify TLC model and runner script HEAD blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          for model_input in formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh; do
+            test -f "$model_input" && test ! -L "$model_input"
+            git ls-files --error-unmatch -- "$model_input" >/dev/null
+            test "$(git hash-object -- "$model_input")" =               "$(git rev-parse --verify "HEAD:$model_input")"
+          done
       - name: Validate runner script and provenance rejection cases
         shell: bash
         run: |
