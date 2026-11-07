@@ -290,6 +290,19 @@ function verifyGuestXmlWithJava(xml,suite){
 
 export function receiptFromArtifact(pin,entries) {
   const isTlc=pin.kind==='TLC_BOUNDED_MODEL_ONLY';
+  const acceptedFiles=new Set(isTlc?[
+    'completed-source-only.json','provenance.json','logs.sha256',
+    'model-inputs.sha256','java-version.txt',
+    ...MODELS.flatMap(model=>[model+'.parse.log',model+'.baseline.log']),
+    ...MUTATIONS.map(mut=>'ActorBorrowGeneration.'+mut+'.counterexample.log')
+  ]:[
+    'suite-gate-completed.json','checkout.json','fixture-sha256.txt',
+    'compiler-class-sha256.txt','surefire-xml-sha256.txt',
+    ...JAVA_SUITES.map(suite=>'TEST-'+suite+'.xml')
+  ]);
+  must(entries instanceof Map && entries.size===acceptedFiles.size &&
+    [...entries.keys()].every(name=>acceptedFiles.has(name)),
+    'unrecognized, missing, or extraneous artifact ZIP evidence files');
   const receipt=jsonOf(entries,isTlc?'completed-source-only.json':'suite-gate-completed.json');
   if(isTlc) {
     const prov=jsonOf(entries,'provenance.json');
