@@ -3,8 +3,10 @@
 set -euo pipefail
 umask 077
 
-# Invalidate an earlier success marker even if this attempt fails admission.
-rm -f private-artifacts/tlc/completed-source-only.json
+# A reused workspace must never contribute previous logs or completion markers.
+# This path is a repository-local generated-artifact directory, not user data.
+rm -rf -- private-artifacts/tlc
+mkdir -p private-artifacts/tlc
 : "${TLA2TOOLS_JAR:?A verified TLC jar is required}"
 : "${EXPECTED_HEAD:?An immutable 40-hex source HEAD is required}"
 : "${EXPECTED_JAR_SHA256:?A pinned jar SHA-256 is required}"
@@ -38,8 +40,12 @@ printf '%s  %s\n' "$EXPECTED_JAR_SHA1" "$TLA2TOOLS_JAR" | sha1sum -c -
 jar tf "$TLA2TOOLS_JAR" | grep -Fx 'tlc2/TLC.class' >/dev/null
 jar tf "$TLA2TOOLS_JAR" | grep -Fx 'tla2sany/SANY.class' >/dev/null
 
-mkdir -p private-artifacts/tlc
-printf '{"scope":"TLC_BOUNDED_MODEL_ONLY","guest":"NOT_EXECUTED","head":"%s","tree":"%s","jar_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\n' \
+# Bind model/config source files and runner to the immutable checkout.
+# Include all source fixtures in the receipt, not just generated logs.
+sha256sum formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh \
+  > private-artifacts/tlc/model-inputs.sha256
+java -version > private-artifacts/tlc/java-version.txt 2>&1
+printf '{"scope":"TLC_BOUNDED_MODEL_ONLY"',"guest":"NOT_EXECUTED","head":"%s","tree":"%s","jar_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\n' \
   "$EXPECTED_HEAD" "$actual_tree" "$EXPECTED_JAR_SHA256" \
   "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB" \
   > private-artifacts/tlc/provenance.json
