@@ -1,0 +1,50 @@
+name: Immutable AttoLang parity dashboard — source-only
+on:
+  pull_request:
+    paths:
+      - 'immutable-parity/**'
+      - '.github/workflows/immutable-parity-static.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: immutable-parity-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  static-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out immutable PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Bind source HEAD and root tree
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_HEAD"
+          tree="$(git rev-parse HEAD^{tree})"
+          test "${#tree}" -eq 40
+          echo "SOURCE_ONLY_SITE_TEST_HEAD=$actual"
+          echo "SOURCE_ONLY_SITE_TEST_TREE=$tree"
+          echo "SOURCE_ONLY_SITE_TEST_RUN=$GITHUB_RUN_ID"
+          echo "SOURCE_ONLY_SITE_TEST_ATTEMPT=$GITHUB_RUN_ATTEMPT"
+          sha256sum immutable-parity/index.html immutable-parity/tests/dashboard.test.cjs
+      - name: Execute source-only Node policy and view tests
+        run: node --test immutable-parity/tests/dashboard.test.cjs
+      - name: Verify source identity and unchanged checkout
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+          echo 'ATTO_GUEST_COMPILER_EXECUTION=NOT_EXECUTED'
+          echo 'EVIDENCE_CLASS=SOURCE_ONLY_SITE_TEST'
