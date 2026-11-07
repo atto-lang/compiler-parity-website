@@ -97,6 +97,7 @@ function pin(kind=TLC_KIND) {
     modelInputManifestSha256:sha(Buffer.from(SOURCE_MANIFEST)),
     requiredSteps:kind===TLC_KIND?
       ['Checkout exact original head (never synthetic PR merge)',
+       'Independently verify TLC model and runner script HEAD blobs',
        'Execute real TLC for five bounded models and three unsafe-mutant controls']:
       ['Checkout immutable original Java PR head',
        'Compile critical AST, Task authority and .ores Truffle guest tests']
