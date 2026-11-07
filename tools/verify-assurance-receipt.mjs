@@ -16,6 +16,16 @@ import {
 export const CANDIDATE_CLASS = 'GITHUB_METADATA_CORROBORATED_CANDIDATE_ONLY';
 const TLC_SHA256='936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88';
 const hex64 = x => typeof x==='string' && /^[a-f0-9]{64}$/.test(x);
+export const REQUIRED_STEPS = Object.freeze({
+  TLC_BOUNDED_MODEL_ONLY: Object.freeze([
+    'Checkout exact original head (never synthetic PR merge)',
+    'Execute real TLC for five bounded models and three unsafe-mutant controls'
+  ]),
+  JAVA_JVM_GUEST_CANDIDATE: Object.freeze([
+    'Checkout immutable original Java PR head',
+    'Compile critical AST, Task authority and .ores Truffle guest tests'
+  ])
+});
 const integer = n => Number.isSafeInteger(n) && n > 0;
 function requireEvidence(ok, reason) {
   if (!ok) throw new Error('EVIDENCE_REJECTED: '+reason);
@@ -46,6 +56,8 @@ export function validatePin(pin) {
     pin.requiredSteps.every(s => typeof s === 'string' && s.length > 0 && s.length <= 150) &&
     new Set(pin.requiredSteps).size === pin.requiredSteps.length,
     'missing/duplicate required step names');
+  requireEvidence(REQUIRED_STEPS[pin.kind].every(name=>pin.requiredSteps.includes(name)),
+    'required immutable checkout/real execution steps not pinned');
   return pin;
 }
 export function validateCandidateReceipt(pin, receipt) {
