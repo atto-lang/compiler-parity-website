@@ -67,7 +67,7 @@ jobs:
         run: node tests/formal-security.test.cjs
       - name: Run mocked metadata collector tests
         run: node --test tests/assurance-collector.test.mjs
-      - name: Execute bounded design models and nine negative mutations
+      - name: Execute bounded design models and ten negative mutations
         run: |
           node --test tests/formal-models.test.mjs
           node formal/check-models.mjs --json > private-artifacts/bounded-model-results.json
