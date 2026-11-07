@@ -67,6 +67,15 @@ The official TLC SHA-256 enforced by the verifier is
 A zero-step job is **RUNNER_NOT_ADMITTED** and cannot be promoted. Retry only
 after identifying and resolving the admission blocker.
 
+The reviewer cannot weaken `requiredSteps` to a setup-only step. The verifier
+requires **both** the immutable checkout and real execution step names for
+each kind. On Java the checkout has the explicit name
+`Checkout immutable original Java PR head` and the main execution step is
+`Compile critical AST, Task authority and .ores Truffle guest tests`.
+On TLC the required names are
+`Checkout exact original head (never synthetic PR merge)` and
+`Execute real TLC for five bounded models and three unsafe-mutant controls`.
+
 The test suite `tests/assurance-receipt-verifier.test.mjs` uses mocked
 readback responses. PR CI runs the mock suite **without a privileged token**.
 No PR workflow may invoke the live verifier with cross-repository secrets.
