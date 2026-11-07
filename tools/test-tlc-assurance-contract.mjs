@@ -25,6 +25,16 @@ assert.match(script,/^rm -rf -- private-artifacts\/tlc$/m,
   'stale successful artifacts and stale model logs must be invalidated before checking');
 assert.match(script,/model-inputs\.sha256/,
   'source model and config files must be content hashed');
+assert.ok(script.includes("readonly TLC_174_SHA256='"+sha256+"'"),
+  'runner itself must refuse caller-controlled SHA256 re-pins');
+assert.ok(script.includes("readonly TLC_174_SHA1='"+sha1+"'"),
+  'runner itself must refuse caller-controlled SHA1 re-pins');
+assert.match(script,/UNAUTHORIZED_TLC_SHA256_REPIN/);
+assert.match(script,/UNAUTHORIZED_TLC_SHA1_REPIN/);
+assert.match(script,/TLA2TOOLS_JAR="\$\(realpath -e -- "\$TLA2TOOLS_JAR"\)"/,
+  'normalize JAR to absolute path before TLC changes directory');
+assert.ok(script.indexOf('realpath -e --') < script.indexOf('pushd formal/specs'),
+  'relative JAR paths must be fixed before changing directory');
 assert.match(script,/^  if ! grep -Fx 'Error: Invariant Inv is violated\.'/m,
   'mutant must have invariant-specific failure');
 assert.match(script,/State 1:/,'mutant must have reachable trace');
@@ -103,10 +113,12 @@ try {
   reject('invalid SHA-256 length',{EXPECTED_JAR_SHA256:'a'.repeat(63)},/Invalid jar SHA-256/);
   reject('invalid SHA-1 length',{EXPECTED_JAR_SHA1:'b'.repeat(39)},/Invalid jar SHA-1/);
   const forgedDigest=createHash('sha256').update(fs.readFileSync(fakeJar)).digest('hex');
-  reject('forged SHA-256 with mismatched official SHA-1',
-    {EXPECTED_JAR_SHA256:forgedDigest},/FAILED|computed checksum did NOT match/i);
+  reject('caller re-pinning SHA-256 to forged JAR',
+    {EXPECTED_JAR_SHA256:forgedDigest},/UNAUTHORIZED_TLC_SHA256_REPIN/);
+  reject('caller re-pinning SHA-1',
+    {EXPECTED_JAR_SHA1:'a'.repeat(40)},/UNAUTHORIZED_TLC_SHA1_REPIN/);
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
-assert.equal(controls,14,'all 14 negative admission controls must execute');
+assert.equal(controls,15,'all 15 negative admission controls must execute');
 console.log('PASS '+controls+' source-only negative controls: stale receipt, '+
   'wrong jar/hash, missing/mismatched head, run/attempt, injection and invalid job');
 console.log('SOURCE_ONLY: No TLC parser/model checker or AttoLang guest executed');
