@@ -56,10 +56,15 @@ gh api repos/ores-truffle-oreslang/compiler-parity-website/check-runs/1282996697
   --jq '.[] | select(.annotation_level == "failure") | .message'
 ```
 
-The connected repository API used by this audit can fetch Actions runs and
-jobs but cannot fetch this `check-runs/{id}/annotations` endpoint; the
-failed private job's log endpoint returned HTTP 404 / `BlobNotFound`.
-**Do not infer an exact billing message from empty logs.**
+The connected repository API used by this audit can fetch Actions runs,
+jobs and commit check-run **summaries**, but cannot fetch this
+`check-runs/{id}/annotations` endpoint; the failed private job's log endpoint
+returned HTTP 404 / `BlobNotFound`. The source-free canary's job API confirms
+`runner_id=0`, `runner_name=""`, `steps=[]`, and its check-run summary
+reports **two annotations** (`annotations_count=2`). The same count is
+present on the other two checks attached to that PR head.
+**Do not infer an exact billing message from the mere annotation count or
+empty logs.**
 
 ### Prioritized owner checks
 
