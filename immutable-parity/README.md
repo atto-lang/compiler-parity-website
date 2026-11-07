@@ -35,3 +35,25 @@ The optional `immutable-parity-static.yml` workflow is **source-only**, checks o
 ## Release hold
 
 Repository is private. **No public Pages deployment** and no tokens are included. Keep this PR in draft pending native stepful source-owned CI, security/confidentiality review, and independent approval. Do not infer merge eligibility from a clean local test or author-edited checklist.
+
+## Security hardening audit — November 6, 2026
+
+Audited and hardened within draft PR #8, without changing overlapping assurance or collector branches.
+
+**P0 fixes:**
+- Strict bounded validation of imported backend, PR, fixture, run, job and checklist records; enforce mandatory lanes, cross-references, unique IDs and names, exact SHA shape, Gregorian UTC timestamps and enums.
+- Reject malformed records before rendering and roll back to previous snapshot if rendering fails.
+- Demote every imported execution and head/tree field to an explicitly untrusted claim, including plausible started-step timestamps and self-asserted independentlyAudited or receiptVerified booleans.
+- Reject duplicate job identities and impossible timestamp values. Inspected null/empty/zero steps indicate failed runner admission; missing/uninspected step records remain unknown.
+
+**P1/P2 fixes:**
+- Backend-only filtering now scopes fixture results.
+- All job step counts are displayed, not just the first job.
+- Date filters explicitly refer to PR update dates.
+- Imported snapshots display IMPORTED SOURCE / UNVERIFIED, not the canonical seed's last-audited stamp.
+- Keyboard activation for PR/run/fixture rows, drawer focus wrapping and focus restoration.
+- Browser-stored checklist marks are sanitized and cannot authenticate GitHub approval.
+
+**Verification:** 25/25 source/DOM harness tests executed locally under Node 22. The repository also includes new source-owned adversarial tests and the workflow runs all immutable-parity/tests/*.test.cjs on an admitted immutable PR head. On the latest head, hosted GitHub jobs still returned steps=null; therefore those jobs did not execute any test steps. No compiler-backed guest or formal proof is claimed.
+
+**Held gates:** nonzero-step source-org CI, independent code/security review, verified five-backend compiler/guest receipts with byte-pinned fixtures and negative mutations, protected-branch review and private hosting safeguards.
