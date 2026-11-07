@@ -36,8 +36,9 @@ assert.equal(head.status,0,head.stderr||'cannot inspect checked-out Git head');
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'atto-tlc-negative-'));
 const receipt='private-artifacts/tlc/completed-source-only.json';
+let controls=0;
 try {
-  const fakeJar=path.join(tmp,'untrusted.jar');
+  const fakeJar=path.join(tmp,'untrusted with spaces.jar');
   fs.writeFileSync(fakeJar,'untrusted\n');
   const env={...process.env,TLA2TOOLS_JAR:fakeJar,
     EXPECTED_HEAD:head.stdout.trim(),
@@ -46,24 +47,35 @@ try {
   const run=(overrides)=>spawnSync('bash',['tools/run-tlc-assurance.sh'],{
     encoding:'utf8',timeout:10000,env:{...env,...overrides}
   });
-  const invalidJar=run({});
-  assert.notEqual(invalidJar.status,0,'untrusted jar must be rejected');
-  assert.match(invalidJar.stdout+invalidJar.stderr,/FAILED|computed checksum did NOT match/i,
-    'wrong JAR must be rejected by the content hash, not an unrelated failure');
-  assert.ok(!fs.existsSync(receipt),'invalid jar must never yield a completion receipt');
-  const missingAttempt=run({GITHUB_RUN_ATTEMPT:''});
-  assert.notEqual(missingAttempt.status,0,'missing attempt must be rejected');
-  assert.match(missingAttempt.stderr,/Run attempt is required/,
-    'invalid attempt must be rejected at its identity check');
-  assert.ok(!fs.existsSync(receipt),'invalid attempt must not yield success');
-  const wrongHead=run({EXPECTED_HEAD:'f'.repeat(40)});
-  assert.notEqual(wrongHead.status,0,'wrong original source head must be rejected');
+  const reject=(label,override,reason)=>{
+    const result=run(override);
+    assert.notEqual(result.status,0,label+' unexpectedly passed');
+    assert.match(result.stdout+result.stderr,reason,
+      label+' failed for the wrong reason');
+    assert.equal(fs.existsSync(receipt),false,
+      label+' must never leave a success receipt');
+    controls++;
+  };
+  fs.mkdirSync(path.dirname(receipt),{recursive:true});
+  fs.writeFileSync(receipt,'{"forged":"stale-success"}\n');
+  reject('stale receipt and invalid jar',{},/FAILED|computed checksum did NOT match/i);
+  reject('missing jar',{TLA2TOOLS_JAR:path.join(tmp,'missing.jar')},/TLC_JAR_MISSING/);
+  reject('missing source head',{EXPECTED_HEAD:''},/source HEAD is required/);
+  reject('invalid source head',{EXPECTED_HEAD:'not-a-full-sha'},/Invalid source SHA/);
+  reject('wrong original source head',{EXPECTED_HEAD:'f'.repeat(40)},/SOURCE_HEAD_MISMATCH/);
+  reject('missing run ID',{GITHUB_RUN_ID:''},/Run identity is required/);
+  reject('zero run ID',{GITHUB_RUN_ID:'0'},/Invalid run ID/);
+  reject('zero attempt',{GITHUB_RUN_ATTEMPT:'0'},/Invalid attempt/);
+  reject('missing attempt',{GITHUB_RUN_ATTEMPT:''},/Run attempt is required/);
+  reject('command-injection-shaped attempt',{GITHUB_RUN_ATTEMPT:'1;true'},/Invalid attempt/);
+  reject('invalid job identity',{GITHUB_JOB:'two job names'},/Invalid job identity/);
+  reject('invalid SHA-256 length',{EXPECTED_JAR_SHA256:'a'.repeat(63)},/Invalid jar SHA-256/);
+  reject('invalid SHA-1 length',{EXPECTED_JAR_SHA1:'b'.repeat(39)},/Invalid jar SHA-1/);
   const forgedDigest=createHash('sha256').update(fs.readFileSync(fakeJar)).digest('hex');
-  const forgedJar=run({EXPECTED_JAR_SHA256:forgedDigest});
-  assert.notEqual(forgedJar.status,0,'matching SHA256 with wrong upstream SHA1 must fail');
-  assert.match(forgedJar.stdout+forgedJar.stderr,/FAILED|computed checksum did NOT match/i,
-    'forged digest must fail because official upstream SHA1 disagrees');
-  assert.ok(!fs.existsSync(receipt),'forged jar must not produce receipt');
+  reject('forged SHA-256 with mismatched official SHA-1',
+    {EXPECTED_JAR_SHA256:forgedDigest},/FAILED|computed checksum did NOT match/i);
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
-console.log('PASS negative jar, expected-head, attempt, upstream-release hash and stale receipt gates');
+assert.equal(controls,14,'all 14 negative admission controls must execute');
+console.log('PASS '+controls+' source-only negative controls: stale receipt, '+
+  'wrong jar/hash, missing/mismatched head, run/attempt, injection and invalid job');
 console.log('SOURCE_ONLY: No TLC parser/model checker or AttoLang guest executed');
