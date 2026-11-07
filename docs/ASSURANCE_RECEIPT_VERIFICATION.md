@@ -88,6 +88,58 @@ The test suite `tests/assurance-receipt-verifier.test.mjs` uses mocked
 readback responses. PR CI runs the mock suite **without a privileged token**.
 No PR workflow may invoke the live verifier with cross-repository secrets.
 
+## Original artifact archive byte verification
+
+The trusted-reviewer verifier `tools/verify-assurance-artifact.mjs`
+adds a separate **byte-level** layer on top of the exact-head metadata gate.
+This does not run under an untrusted pull-request workflow.
+
+1. Obtain the original **ZIP file** from the intended GitHub Actions
+   run's artifact page, using a GitHub-authenticated account with read access.
+   Do not supply an extracted directory, a repacked ZIP, a self-produced
+   archive, or an artifact from a different attempt.
+2. From a clean, independently reviewed checkout of the verifier, prepare the
+   same trusted pin as above, with the additional independently checked
+   `repositoryId` (the numeric GitHub repository ID).
+3. Execute the read-only check from a trusted reviewer workstation:
+
+```sh
+ASSURANCE_READ_TOKEN=... node tools/verify-assurance-artifact.mjs \
+  /secure/reviewer-pins/atto-pin.json /secure/evidence/original-github-artifact.zip
+```
+
+The verifier re-fetches GitHub's **exact run** and artifact list using
+`Actions: read` permission; requires a unique canonical name for the
+`runId` and `attempt`, matching original repository ID/head, a
+non-expired artifact, a bounded size, and GitHub's SHA-256 digest.
+It computes SHA-256 of the actual downloaded ZIP bytes and compares it to
+the API digest. There is **no automatic redirect following or token forwarding
+to an artifact CDN** inside this verifier.
+
+The ZIP reader does not extract paths to disk. It verifies central/local
+headers, CRC32, regular files only, unique safe names, supported compression,
+and strict compressed/uncompressed size limits. It rejects ZIP traversal,
+symlinks, duplicate paths, ZIP bombs, encryption, corruption and trailing
+data. TLC receipts must include source/run provenance, five model baseline
+and parser logs, three mutant traces, and a matching SHA-256 manifest.
+Java candidate receipts must include compiler-class and canonical `.atto`
+fixture SHA-256 manifests, matching checkout provenance and the guest
+Surefire XML. Once the archive checks pass, the original
+`verifyLiveCandidate` gate must also corroborate the current PR,
+root tree, canonical workflow, run attempt, assigned runner and required
+successful execution steps.
+
+**Output is still `GITHUB_ARTIFACT_BYTES_CORROBORATED_CANDIDATE_ONLY`.**
+A GitHub API digest ties the supplied bytes to GitHub's artifact metadata;
+it is **not a signed software attestation** or independent verification of
+compiler/guest semantics. An untrusted PR author may have produced false
+outputs inside a legitimately uploaded archive. A reviewer must still inspect
+real guest traces and build results before release decisions.
+
+The PR's own CI only runs synthetic ZIP + mocked GitHub-API negative tests,
+without any `ASSURANCE_READ_TOKEN`, external archive download, private
+source mirror, or guest-execution claim.
+
 ## What a passing result actually means
 
 The ONLY successful classification is
