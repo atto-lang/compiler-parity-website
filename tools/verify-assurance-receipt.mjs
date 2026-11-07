@@ -26,6 +26,10 @@ export const REQUIRED_STEPS = Object.freeze({
     'Compile critical AST, Task authority and .ores Truffle guest tests'
   ])
 });
+export const EXPECTED_WORKFLOWS = Object.freeze({
+  TLC_BOUNDED_MODEL_ONLY: '.github/workflows/assurance-tlc.yml',
+  JAVA_JVM_GUEST_CANDIDATE: '.github/workflows/critical-suspends-java-admission.yml'
+});
 const integer = n => Number.isSafeInteger(n) && n > 0;
 function requireEvidence(ok, reason) {
   if (!ok) throw new Error('EVIDENCE_REJECTED: '+reason);
@@ -44,7 +48,11 @@ export function validatePin(pin) {
   requireEvidence(integer(pin.pr) && exactSha(pin.head) && exactSha(pin.tree),
     'invalid PR or pinned source head/tree');
   requireEvidence(integer(pin.runId) && integer(pin.attempt) &&
-    integer(pin.jobId) && validName(pin.jobName) && validName(pin.jobKey), 'invalid pinned run/job identity');
+    integer(pin.jobId) && integer(pin.workflowId) &&
+    validName(pin.jobName) && validName(pin.jobKey),
+    'invalid pinned workflow/run/job identity');
+  requireEvidence(pin.workflowPath===EXPECTED_WORKFLOWS[pin.kind],
+    'workflow path is not the canonical evidence-producing workflow');
   requireEvidence(['TLC_BOUNDED_MODEL_ONLY','JAVA_JVM_GUEST_CANDIDATE'].includes(pin.kind),
     'unsupported evidence kind');
   requireEvidence(pin.kind==='TLC_BOUNDED_MODEL_ONLY'
@@ -111,14 +119,20 @@ export async function verifyLiveCandidate(api,pin,receipt) {
   requireEvidence(commit && commit.tree?.sha===pin.tree,
     'commit root tree was not corroborated');
   requireEvidence(run && run.id===pin.runId && run.head_sha===pin.head &&
-    run.event==='pull_request' && run.run_attempt===pin.attempt &&
+    run.event==='pull_request' &&
+    run.workflow_id===pin.workflowId && run.path===pin.workflowPath &&
+    run.run_attempt===pin.attempt &&
     run.status==='completed' && run.conclusion==='success',
     'run source/event/attempt/conclusion was not corroborated');
-  // Cross-check PR association when provided by GitHub: the selected source
-  // must belong to this PR, not simply share a similarly named workflow.
-  if(Array.isArray(run.pull_requests) && run.pull_requests.length)
-    requireEvidence(run.pull_requests.some(p=>p.number===pin.pr &&
-      (!p.head?.sha || p.head.sha===pin.head)), 'run not associated with pinned PR');
+  requireEvidence(Array.isArray(run.pull_requests) &&
+    run.pull_requests.some(p=>p.number===pin.pr && p.head?.sha===pin.head),
+    'run has no confirmed association with the pinned PR and head');
+  if(run.repository)
+    requireEvidence(run.repository.full_name===pin.repo,
+      'workflow repository identity mismatch');
+  if(run.head_commit?.tree_id)
+    requireEvidence(run.head_commit.tree_id===pin.tree,
+      'workflow run head-commit tree mismatch');
   requireEvidence(attemptJobs && Array.isArray(attemptJobs.jobs) &&
     attemptJobs.jobs.length>0 && attemptJobs.jobs.length<100 &&
     attemptJobs.total_count===attemptJobs.jobs.length,
@@ -133,20 +147,35 @@ export async function verifyLiveCandidate(api,pin,receipt) {
   const job=attemptJobs.jobs.find(j=>j.id===pin.jobId);
   requireEvidence(job && job.name===pin.jobName &&
     job.status==='completed' && job.conclusion==='success' &&
-    integer(job.runner_id) &&
+    job.run_id===pin.runId && job.run_attempt===pin.attempt &&
+    job.head_sha===pin.head &&
+    job.check_run_url==='https://api.github.com'+base+'/check-runs/'+pin.jobId &&
+    integer(job.runner_id) && typeof job.runner_name==='string' &&
+    job.runner_name.trim().length>0 &&
     Array.isArray(job.steps) &&
     stepState(job.steps)===OBSERVATION.STEPS_EXECUTED,
     'selected job not genuinely stepful and successful');
-  const named=new Map();
+  const named=new Map(), numbers=new Set();
+  let lastNumber=0;
   for(const step of job.steps){
     requireEvidence(step && typeof step.name==='string' &&
-      !named.has(step.name), 'duplicate or invalid step identity');
+      !named.has(step.name) && integer(step.number) &&
+      !numbers.has(step.number) && step.number>lastNumber,
+      'duplicate/out-of-order/invalid job step identity');
+    requireEvidence(step.status==='completed' &&
+      (step.conclusion==='success' || step.conclusion==='skipped'),
+      'job contains a failed, cancelled or unfinished step');
+    numbers.add(step.number);
+    lastNumber=step.number;
     named.set(step.name,step);
   }
   const accepted=[];
+  let lastRequiredNumber=0;
   for(const name of pin.requiredSteps){
     const step=named.get(name);
-    requireEvidence(finishedSuccess(step), 'required step missing, skipped or unexecuted: '+name);
+    requireEvidence(finishedSuccess(step) && step.number>lastRequiredNumber,
+      'required step missing, skipped, out of order or unexecuted: '+name);
+    lastRequiredNumber=step.number;
     accepted.push(name);
   }
   return Object.freeze({
@@ -157,6 +186,7 @@ export async function verifyLiveCandidate(api,pin,receipt) {
     proof:'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED',
     kind:pin.kind,repo:pin.repo,pr:pin.pr,
     head:pin.head,tree:pin.tree,
+    workflowId:pin.workflowId,workflowPath:pin.workflowPath,
     runId:pin.runId,attempt:pin.attempt,jobId:pin.jobId,
     jobKey:pin.jobKey,jobDisplayName:pin.jobName,
     runnerId:job.runner_id,startedSteps:job.steps.filter(finishedSuccess).length,
