@@ -37,7 +37,7 @@ jobs:
           echo "SOURCE_ONLY_SITE_TEST_ATTEMPT=$GITHUB_RUN_ATTEMPT"
           sha256sum immutable-parity/index.html immutable-parity/tests/dashboard.test.cjs
       - name: Execute source-only Node policy and view tests
-        run: node --test immutable-parity/tests/dashboard.test.cjs
+        run: node --test immutable-parity/tests/*.test.cjs
       - name: Verify source identity and unchanged checkout
         shell: bash
         env:
