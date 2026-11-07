@@ -21,6 +21,15 @@ assert.match(workflow,/sha256sum -c -/);
 assert.match(workflow,/sha1sum -c -/);
 assert.match(workflow,/github\.event\.pull_request\.head\.sha \|\| github\.sha/);
 assert.match(workflow,/persist-credentials: false/);
+assert.ok(workflow.includes('Independently verify TLC model and runner script HEAD blobs'),
+  'an independent workflow step must enforce the original-head blob preflight');
+assert.match(workflow,/for model_input in formal\/specs\/\*\.tla formal\/specs\/\*\.cfg tools\/run-tlc-assurance\.sh; do/,
+  'workflow must verify all TLC model/config and runner-script blobs independently');
+assert.match(workflow,/git hash-object -- "\$model_input"/,
+  'preflight must check on-disk bytes against the original HEAD tree');
+assert.ok(workflow.indexOf('Independently verify TLC model and runner script HEAD blobs') <
+  workflow.indexOf('Execute real TLC for five bounded models and three unsafe-mutant controls'),
+  'the original-head blob preflight must precede TLC execution');
 assert.match(script,/^rm -rf -- private-artifacts\/tlc$/m,
   'stale successful artifacts and stale model logs must be invalidated before checking');
 assert.match(script,/model-inputs\.sha256/,
