@@ -9,7 +9,8 @@ test into verified AttoLang compiler or runtime proof.
 `tools/verify-assurance-receipt.mjs` receives two separate objects:
 
 1. A **trusted pin** prepared by the independent reviewer, with repository,
-   current PR/head/root tree, immutable run ID/attempt, selected GitHub
+   current PR/head/root tree, the canonical workflow file and immutable
+   workflow ID, immutable run ID/attempt, selected GitHub
    numeric job ID, job **display name**, job **key** (`GITHUB_JOB`), expected
    step names and pinned compiler/TLC/fixture SHA-256 hashes.
 2. A potentially **untrusted completion receipt** downloaded from the job's
@@ -19,10 +20,16 @@ It then performs fresh, read-only GitHub API calls for the PR, Git commit,
 workflow run, and the exact run-attempt jobs page. It fails if:
 
 - The PR's current head or root Git tree differs from the independent pin.
-- The workflow event, run head, run attempt or success status disagrees.
-- Jobs are duplicated, missing or paginated beyond the inspected page.
+- The GitHub workflow ID or path is not the canonical TLC/Java workflow,
+  the workflow event or PR association is wrong, or the run head,
+  run attempt or success status disagrees.
+- Jobs are duplicated, missing or paginated beyond the inspected page,
+  the job points to a different run/attempt/head/check-run URL, or the
+  assigned runner has no ID/name.
 - The chosen job lacks a real runner ID, successful conclusion or step records.
-- A required step was never started, was skipped/failed, or has bad timestamps.
+- A required step was never started, was skipped/failed, has invalid
+  timestamps, appears out of order, or the job contains a hidden
+  failed/unfinished step (including an ignored `continue-on-error` failure).
 - Receipt head, tree, run, attempt, job key, hash or scope disagrees with the
   pinned and GitHub-observed values.
 - A source-only TLC receipt claims an executed guest or a Java candidate
@@ -54,6 +61,7 @@ For Java, pass a `JAVA_JVM_GUEST_CANDIDATE` pin and the
 | Field | TLC | Java |
 | --- | --- | --- |
 | `repo`, `pr`, `head`, `tree` | Required exact original source | Required exact original source |
+| `workflowPath`, `workflowId` | Canonical TLC workflow and API ID | Canonical Java workflow and API ID |
 | `runId`, `attempt`, `jobId` | Exact job API identities | Exact job API identities |
 | `jobName`, `jobKey` | Distinct display name and `GITHUB_JOB` | Usually the same; both required |
 | `requiredSteps` | Checkout and executed TLC step | Checkout and Maven/Surefire validation step |
