@@ -1,0 +1,74 @@
+# P0 — Recover GitHub Actions runner admission (not a compiler failure)
+
+## Diagnostic isolation
+
+The **source-free** workflow `.github/workflows/runner-admission-canary.yml`
+intentionally has no checkout, repository source, third-party actions or
+credentials. It executes only shell statements and labels itself
+`SOURCE_FREE_RUNNER_STEP_EXECUTED` once a runner actually starts.
+
+At the first attempted PR execution:
+
+- Workflow: https://github.com/ores-truffle-oreslang/compiler-parity-website/actions/runs/42336776567
+- Job ID: `128295353278`
+- Status: completed, conclusion: failure, `steps=null`
+- Parallel original-head dashboard workflow:
+  https://github.com/ores-truffle-oreslang/compiler-parity-website/actions/runs/42336776545
+- Dashboard job ID: `128295353703`, `steps=null`.
+
+Both are **RUNNER_NOT_ADMITTED** as a local evidence classification. An API
+result with missing steps cannot prove that any shell script, source-only test,
+formal model, compiler or guest ran. It does not by itself distinguish billing,
+private-repo policy, an unavailable runner group or platform incident.
+
+## Administrator checklist (run in this order)
+
+1. Read the source-free workflow's run page and any **workflow-level** error
+   banner / organization policy annotation. Record exact reason without
+   generalizing from a zero-step result.
+2. With authorized access, inspect GitHub account/organization **Billing &
+   licensing → Actions**: remaining included minutes, spending limits and
+   payment/usage restrictions. Do not make unapproved billing changes.
+3. Check **repository/org Settings → Actions → General** for Actions enabled,
+   allowed actions, policy restrictions, PR workflow approvals and workflow
+   permissions. The source-free canary requires no elevated token permissions.
+4. Check **Actions → Runners** and inherited runner groups for eligibility,
+   capacity and assignments. This canary requests `ubuntu-latest` on a
+   GitHub-hosted runner.
+5. If an approved **funded** carrier is available, run a separate source-free
+   canary there to isolate whether the problem is account, organization or
+   repository scoped. **Do not mirror private source** into another organization
+   or repository without independent authorization.
+6. Retry the source-free canary only after a specific admission change or
+   maintenance recovery. Capture the run ID, run attempt, job ID, runner
+   allocation, and **at least one started step** from GitHub's job-step API.
+   `steps=[]`, `steps=null` and zero started steps do not qualify.
+7. Once the canary works, run
+   `.github/workflows/assurance-dashboard.yml` and
+   `.github/workflows/assurance-tlc.yml` on the **immutable current PR head**,
+   then the Java critical-suspends guest workflow in `oreslang-source.java`.
+   Verify original checkout head/tree, actual executed steps, tool hashes,
+   compiler/test results, and negative controls independently.
+
+## Evidence classes — do not promote across them
+
+| Event | Maximum justified conclusion |
+| --- | --- |
+| PR workflow created with `steps=null` | `RUNNER_NOT_ADMITTED` |
+| Source-free canary has a started shell step | Runner admission works **for that job** |
+| Dashboard Node and JS bounded models execute | `SOURCE_ONLY_DESIGN_MODEL` |
+| Trusted TLC jar and all reference/mutant checks execute | `TLC_BOUNDED_MODEL_ONLY` |
+| Original-head Java compiler parses/checks and Graal guests execute | Scoped JVM guest evidence |
+| All five compilers and native guests execute byte-identical `.atto` fixtures | Candidate parity evidence, still subject to independent attestation |
+
+No category by itself proves unbounded liveness, production refinement or
+cross-backend parity. Reviews, protected source branches and signed/independent
+receipt verification are separate merge gates.
+
+## Minimal operator receipt
+
+Record `repo`, PR, original 40-hex `head`, job's actual checked-out tree
+when a checkout exists, `run_id`, `run_attempt`, `job_id`,
+`runner_id`, started step names/IDs, conclusion, toolchain version/digest
+and executed fixture/test hashes. The source-free canary intentionally has no
+checkout tree; it must never report one as attested.
