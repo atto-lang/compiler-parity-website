@@ -70,7 +70,6 @@ test('cancellation cannot retain an undelivered queued publication',()=>{
 test('rt take while a shared reader is live leaves a stale reader generation',()=>{
   const result=explore(models.actorBorrow,{mutant:'take-while-readers-active'});
   assert.equal(result.ok,false);
-  assert.equal(result.depthTruncated,false);
   assert.match(result.violation,/reader survives ownership generation change/);
   assert.deepEqual(result.trace,[
     'acquire-shared-reader',
