@@ -531,3 +531,17 @@ test('ZIP preamble and unreferenced local-record gap must not hide payload bytes
   prefixed.writeUInt32LE(secret.length,newCentral+42);
   assert.throws(()=>inspectZip(prefixed),/ARTIFACT_REJECTED/);
 });
+
+test('otherwise valid GitHub archive cannot carry unrelated or hidden evidence files',()=>{
+  for(const kind of [TLC_KIND,JAVA_KIND]){
+    const p=pin(kind),canonical=kind===TLC_KIND?tlcFiles(p):javaFiles(p);
+    assert.ok(receiptFromArtifact(p,inspectZip(zip(canonical))));
+    for(const extra of ['hidden-diagnostic.txt','alt-source.ores','notes.json']){
+      const forged=[...canonical,[extra,'unreviewed data']];
+      assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(forged))),
+        /ARTIFACT_REJECTED/);
+    }
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(canonical.slice(1)))),
+      /ARTIFACT_REJECTED/);
+  }
+});
