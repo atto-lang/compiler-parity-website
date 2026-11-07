@@ -47,9 +47,10 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   echo "TRACKED_SOURCE_DIRTY" >&2
   exit 1
 fi
-# Untracked or symlinked TLA/config inputs can change model behavior while
-# HEAD and the tracked-tree identity stay unchanged. Reject all such inputs.
-for model_input in formal/specs/*.tla formal/specs/*.cfg; do
+# Untracked or symlinked model/config files and the executed runner script
+# can change behavior while HEAD stays unchanged. Even assume-unchanged or
+# skip-worktree must not hide any executable/input bytes from HEAD readback.
+for model_input in formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh; do
   if [[ ! -f "$model_input" || -L "$model_input" ]] ||
      ! git ls-files --error-unmatch -- "$model_input" >/dev/null 2>&1; then
     echo "UNTRACKED_MODEL_INPUT: $model_input" >&2
