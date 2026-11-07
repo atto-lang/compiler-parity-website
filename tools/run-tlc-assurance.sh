@@ -55,6 +55,14 @@ for model_input in formal/specs/*.tla formal/specs/*.cfg; do
     echo "UNTRACKED_MODEL_INPUT: $model_input" >&2
     exit 1
   fi
+  # git status can overlook assume-unchanged/skip-worktree modifications.
+  # Compare actual on-disk bytes to the immutable original HEAD blob.
+  current_blob="$(git hash-object -- "$model_input")"
+  expected_blob="$(git rev-parse --verify "HEAD:$model_input")"
+  if [[ "$current_blob" != "$expected_blob" ]]; then
+    echo "MODEL_INPUT_BLOB_MISMATCH: $model_input" >&2
+    exit 1
+  fi
 done
 actual_tree="$(git rev-parse 'HEAD^{tree}')"
 [[ "$actual_tree" =~ ^[0-9a-f]{40}$ ]]
