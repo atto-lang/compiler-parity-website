@@ -31,6 +31,10 @@ assert.ok(script.includes("readonly TLC_174_SHA1='"+sha1+"'"),
   'runner itself must refuse caller-controlled SHA1 re-pins');
 assert.match(script,/UNAUTHORIZED_TLC_SHA256_REPIN/);
 assert.match(script,/UNAUTHORIZED_TLC_SHA1_REPIN/);
+assert.match(script,/UNTRACKED_MODEL_INPUT/,
+  'ignore Git HEAD alone is not enough: untracked TLA modules must be rejected');
+assert.match(script,/git ls-files --error-unmatch -- "\$model_input"/,
+  'each compiled .tla/.cfg must be a tracked Git-tree input');
 assert.match(script,/TLA2TOOLS_JAR="\$\(realpath -e -- "\$TLA2TOOLS_JAR"\)"/,
   'normalize JAR to absolute path before TLC changes directory');
 assert.ok(script.indexOf('realpath -e --') < script.indexOf('pushd formal/specs'),
@@ -100,6 +104,14 @@ try {
   reject('stale receipt and invalid jar',{},/FAILED|computed checksum did NOT match/i);
   assert.equal(fs.existsSync('private-artifacts/tlc/ActorIsolation.baseline.log'),false,
     'prior model log must not be incorporated into a future receipt');
+  const injectedModel='formal/specs/AssuranceUntrackedInjection.tla';
+  fs.writeFileSync(injectedModel,'---- MODULE AssuranceUntrackedInjection ----\n====\n');
+  try {
+    reject('untracked model input escapes git status --untracked-files=no',
+      {},/UNTRACKED_MODEL_INPUT/);
+  } finally {
+    fs.rmSync(injectedModel,{force:true});
+  }
   reject('missing jar',{TLA2TOOLS_JAR:path.join(tmp,'missing.jar')},/TLC_JAR_MISSING/);
   reject('missing source head',{EXPECTED_HEAD:''},/source HEAD is required/);
   reject('invalid source head',{EXPECTED_HEAD:'not-a-full-sha'},/Invalid source SHA/);
@@ -118,7 +130,7 @@ try {
   reject('caller re-pinning SHA-1',
     {EXPECTED_JAR_SHA1:'a'.repeat(40)},/UNAUTHORIZED_TLC_SHA1_REPIN/);
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
-assert.equal(controls,15,'all 15 negative admission controls must execute');
+assert.equal(controls,16,'all 16 negative admission controls must execute');
 console.log('PASS '+controls+' source-only negative controls: stale receipt, '+
   'wrong jar/hash, missing/mismatched head, run/attempt, injection and invalid job');
 console.log('SOURCE_ONLY: No TLC parser/model checker or AttoLang guest executed');
