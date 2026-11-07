@@ -59,7 +59,7 @@ jobs:
         run: |
           bash -n tools/run-tlc-assurance.sh
           node tools/test-tlc-assurance-contract.mjs
-      - name: Execute real TLC for five bounded models and two unsafe-mutant controls
+      - name: Execute real TLC for five bounded models and three unsafe-mutant controls
         shell: bash
         run: bash tools/run-tlc-assurance.sh
       - name: Upload source-only TLC logs (no compiler or guest assertions)
