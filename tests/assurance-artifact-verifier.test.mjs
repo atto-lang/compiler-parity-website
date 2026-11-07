@@ -218,3 +218,39 @@ test('Java forged compiler hash, missing XML and failed XML rejected',()=>{
     '<testsuite><failure>oops</failure></testsuite>';
   assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(failed))),/ARTIFACT_REJECTED/);
 });
+
+test('complete simulated API readback stays candidate-only even when artifact and job match',async()=>{
+  const p=pin(),archive=zip(tlcFiles(p)),source=fixture(p,archive);
+  const api={async get(url){
+    if(url.endsWith('/actions/runs/45/artifacts?per_page=100'))return source.listing;
+    if(url.endsWith('/actions/runs/45'))return {
+      ...source.run,event:'pull_request',workflow_id:p.workflowId,
+      path:p.workflowPath,run_attempt:p.attempt,
+      status:'completed',conclusion:'success',head_commit:{tree_id:p.tree},
+      pull_requests:[{number:p.pr,head:{sha:p.head}}]
+    };
+    if(url.endsWith('/pulls/7'))return {number:p.pr,head:{sha:p.head}};
+    if(url.endsWith('/git/commits/'+p.head))return {tree:{sha:p.tree}};
+    if(url.endsWith('/actions/runs/45/attempts/2/jobs?per_page=100'))return {
+      total_count:1,jobs:[{
+        id:p.jobId,name:p.jobName,run_id:p.runId,run_attempt:p.attempt,
+        head_sha:p.head,check_run_url:'https://api.github.com/repos/'+p.repo+
+          '/check-runs/'+p.jobId,
+        runner_id:9001,runner_name:'GitHub Actions 9001',
+        status:'completed',conclusion:'success',
+        steps:p.requiredSteps.map((name,i)=>({
+          number:i+1,name,status:'completed',conclusion:'success',
+          started_at:'2026-11-07T10:00:00Z',
+          completed_at:'2026-11-07T10:00:01Z'
+        }))
+      }]
+    };
+    throw Error('Unexpected private GitHub endpoint: '+url);
+  }};
+  const result=await verifyArtifactCandidate(api,p,archive);
+  assert.equal(result.classification,'GITHUB_ARTIFACT_BYTES_CORROBORATED_CANDIDATE_ONLY');
+  assert.equal(result.artifactDigest,'sha256:'+sha(archive));
+  assert.equal(result.guestExecution,'NOT_INDEPENDENTLY_VERIFIED');
+  assert.equal(result.proof,'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED');
+  assert.equal(result.runnerId,9001);
+});
