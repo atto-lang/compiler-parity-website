@@ -45,7 +45,7 @@ jar tf "$TLA2TOOLS_JAR" | grep -Fx 'tla2sany/SANY.class' >/dev/null
 sha256sum formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh \
   > private-artifacts/tlc/model-inputs.sha256
 java -version > private-artifacts/tlc/java-version.txt 2>&1
-printf '{"scope":"TLC_BOUNDED_MODEL_ONLY","guest":"NOT_EXECUTED","head":"%s","tree":"%s","jar_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\\n' \
+printf '{"scope":"TLC_BOUNDED_MODEL_ONLY","guest":"NOT_EXECUTED","head":"%s","tree":"%s","jar_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\n' \
   "$EXPECTED_HEAD" "$actual_tree" "$EXPECTED_JAR_SHA256" \
   "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB" \
   > private-artifacts/tlc/provenance.json
