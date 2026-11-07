@@ -26,6 +26,12 @@ assert.match(script,/^rm -f private-artifacts\/tlc\/completed-source-only\.json/
 assert.match(script,/^  if ! grep -Fx 'Error: Invariant Inv is violated\.'/m,
   'mutant must have invariant-specific failure');
 assert.match(script,/State 1:/,'mutant must have reachable trace');
+assert.ok(script.includes('read-transfer'),'active-reader transfer mutant must be executed');
+assert.match(script,/expected_invariant_counterexamples":3/);
+assert.ok(fs.readFileSync('formal/specs/ActorBorrowGeneration.tla','utf8')
+  .includes('NoOldReader'),'reader generation invariant must be present');
+assert.match(fs.readFileSync('formal/specs/ActorBorrowGeneration.read-transfer-mutant.cfg','utf8'),
+  /SPECIFICATION MutantReadTransferSpec/);
 assert.match(script,/verification":"UNATTESTED_TOOL_RUN"/);
 assert.match(script,/guest":"NOT_EXECUTED"/);
 
