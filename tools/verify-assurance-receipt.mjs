@@ -19,6 +19,7 @@ const hex64 = x => typeof x==='string' && /^[a-f0-9]{64}$/.test(x);
 export const REQUIRED_STEPS = Object.freeze({
   TLC_BOUNDED_MODEL_ONLY: Object.freeze([
     'Checkout exact original head (never synthetic PR merge)',
+    'Independently verify TLC model and runner script HEAD blobs',
     'Execute real TLC for five bounded models and three unsafe-mutant controls'
   ]),
   JAVA_JVM_GUEST_CANDIDATE: Object.freeze([
