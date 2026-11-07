@@ -43,24 +43,29 @@ function crc32(b) {
   for(const x of b){c^=x;for(let i=0;i<8;i++)c=(c>>>1)^(0xedb88320&-(c&1));}
   return (c^0xffffffff)>>>0;
 }
-function zip(files,{method=8,symlink=false}={}) {
+function zip(files,{method=8,symlink=false,dataDescriptor=false}={}) {
   const local=[],central=[];let pos=0;
   for(const [name,data] of files) {
     const nb=Buffer.from(name),plain=Buffer.from(data);
     const body=method===8?deflateRawSync(plain):plain;
     const a=Buffer.alloc(30),b=Buffer.alloc(46),crc=crc32(plain);
     a.writeUInt32LE(0x04034b50,0);a.writeUInt16LE(20,4);
-    a.writeUInt16LE(method,8);a.writeUInt32LE(crc,14);
-    a.writeUInt32LE(body.length,18);a.writeUInt32LE(plain.length,22);
+    a.writeUInt16LE(dataDescriptor?8:0,6);
+    a.writeUInt16LE(method,8);
+    if(!dataDescriptor){a.writeUInt32LE(crc,14);
+      a.writeUInt32LE(body.length,18);a.writeUInt32LE(plain.length,22);}
     a.writeUInt16LE(nb.length,26);
     b.writeUInt32LE(0x02014b50,0);b.writeUInt16LE(0x031e,4);
-    b.writeUInt16LE(20,6);b.writeUInt16LE(method,10);
+    b.writeUInt16LE(20,6);b.writeUInt16LE(dataDescriptor?8:0,8);b.writeUInt16LE(method,10);
     b.writeUInt32LE(crc,16);b.writeUInt32LE(body.length,20);
     b.writeUInt32LE(plain.length,24);b.writeUInt16LE(nb.length,28);
     b.writeUInt32LE(((symlink?0o120777:0o100644)<<16)>>>0,38);
     b.writeUInt32LE(pos,42);
-    local.push(a,nb,body);central.push(b,nb);
-    pos+=a.length+nb.length+body.length;
+    const desc=Buffer.alloc(dataDescriptor?16:0);
+    if(dataDescriptor){desc.writeUInt32LE(0x08074b50,0);desc.writeUInt32LE(crc,4);
+      desc.writeUInt32LE(body.length,8);desc.writeUInt32LE(plain.length,12);}
+    local.push(a,nb,body,desc);central.push(b,nb);
+    pos+=a.length+nb.length+body.length+desc.length;
   }
   const dir=Buffer.concat(central),end=Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(files.length,8);
@@ -363,4 +368,55 @@ test('Java guest XML needs eight exact direct passing cases, not a forged test c
     list.find(x=>x[0]===xmlName)[1]=forged;
     assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
   }
+});
+
+test('real-world TLC comma-grouped final state counts are accepted safely',()=>{
+  const p=pin();
+  const files=tlcFiles(p);
+  const row=files.find(x=>x[0]==='ActorIsolation.baseline.log');
+  row[1]=row[1].replace(
+    '5 states generated, 5 distinct states found, 0 states left on queue.',
+    '17,118 states generated, 5,120 distinct states found, 0 states left on queue.');
+  files.find(x=>x[0]==='logs.sha256')[1]=
+    files.filter(x=>x[0].endsWith('.log'))
+      .map(([n,txt])=>sha(Buffer.from(txt))+'  private-artifacts/tlc/'+n).join('\n')+'\n';
+  assert.equal(receiptFromArtifact(p,inspectZip(zip(files))).baseline_models,5);
+});
+test('TLC malformed grouping and unsafe integer state counts rejected',()=>{
+  const p=pin();
+  for(const bogus of [
+    '17,11 states generated, 5,120 distinct states found, 0 states left on queue.',
+    '17,118 states generated, 51,20 distinct states found, 0 states left on queue.',
+    '05 states generated, 05 distinct states found, 0 states left on queue.',
+    '9,007,199,254,740,992 states generated, 5,120 distinct states found, 0 states left on queue.'
+  ]){
+    const files=tlcFiles(p),row=files.find(x=>x[0]==='ActorIsolation.baseline.log');
+    row[1]=row[1].replace('5 states generated, 5 distinct states found, 0 states left on queue.',bogus);
+    files.find(x=>x[0]==='logs.sha256')[1]=files.filter(x=>x[0].endsWith('.log'))
+      .map(([n,txt])=>sha(Buffer.from(txt))+'  private-artifacts/tlc/'+n).join('\n')+'\n';
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(files))),/ARTIFACT_REJECTED/);
+  }
+});
+test('ZIP streaming data descriptor accepted when CRC and lengths agree',()=>{
+  const bytes=zip([['receipt.json','proof candidate']],{dataDescriptor:true});
+  assert.equal(inspectZip(bytes).get('receipt.json').toString(),'proof candidate');
+});
+test('ZIP local CRC, size, flags, and streaming descriptors cannot contradict central',()=>{
+  const original=zip([['entry.txt','bounded ZIP validation']]);
+  const centralAt=original.readUInt32LE(original.length-22+16);
+  const muts=[
+    b=>b.writeUInt32LE(0,14),
+    b=>b.writeUInt32LE(0,18),
+    b=>b.writeUInt32LE(0,22),
+    b=>{b.writeUInt16LE(8,6);b.writeUInt16LE(8,centralAt+8)},
+    b=>{b.writeUInt16LE(0x1000,6);b.writeUInt16LE(0x1000,centralAt+8)}
+  ];
+  for(const change of muts){
+    const bytes=Buffer.from(original);change(bytes);
+    assert.throws(()=>inspectZip(bytes),/ARTIFACT_REJECTED/);
+  }
+  const withDescriptor=zip([['entry.txt','bounded ZIP validation']],{dataDescriptor:true});
+  const mutated=Buffer.from(withDescriptor),dAt=mutated.readUInt32LE(mutated.length-22+16);
+  mutated.writeUInt32LE(0,dAt-12);
+  assert.throws(()=>inspectZip(mutated),/ARTIFACT_REJECTED/);
 });
