@@ -9,6 +9,8 @@ on:
       - 'formal/**'
       - 'tools/collect-assurance.mjs'
       - 'tools/verify-assurance-receipt.mjs'
+      - 'tools/verify-assurance-artifact.mjs'
+      - 'tests/assurance-artifact-verifier.test.mjs'
       - 'tests/assurance-receipt-verifier.test.mjs'
       - 'tools/run-tlc-assurance.sh'
       - 'tools/test-tlc-assurance-contract.mjs'
@@ -61,6 +63,8 @@ jobs:
           node --check formal-security.js
           node --check tools/collect-assurance.mjs
           node --check tools/verify-assurance-receipt.mjs
+          node --check tools/verify-assurance-artifact.mjs
+          node --check tests/assurance-artifact-verifier.test.mjs
           node --check tests/assurance-receipt-verifier.test.mjs
           node --check formal/check-models.mjs
           node --check tests/formal-security.test.cjs
@@ -73,6 +77,8 @@ jobs:
         run: node --test tests/assurance-collector.test.mjs
       - name: Test independent receipt metadata readback gate using forged GitHub fixtures
         run: node --test tests/assurance-receipt-verifier.test.mjs
+      - name: Test authenticated ZIP archive digest and provenance rejection cases (mocked API)
+        run: node --test tests/assurance-artifact-verifier.test.mjs
       - name: Execute bounded design models and ten negative mutations
         run: |
           node --test tests/formal-models.test.mjs
