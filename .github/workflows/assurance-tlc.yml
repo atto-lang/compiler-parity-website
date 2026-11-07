@@ -63,7 +63,7 @@ jobs:
           for model_input in formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh; do
             test -f "$model_input" && test ! -L "$model_input"
             git ls-files --error-unmatch -- "$model_input" >/dev/null
-            test "$(git hash-object -- "$model_input")" =               "$(git rev-parse --verify "HEAD:$model_input")"
+            test "$(git hash-object -- "$model_input")" = "$(git rev-parse --verify "HEAD:$model_input")"
           done
       - name: Validate runner script and provenance rejection cases
         shell: bash
