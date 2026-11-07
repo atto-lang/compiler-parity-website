@@ -21,8 +21,10 @@ assert.match(workflow,/sha256sum -c -/);
 assert.match(workflow,/sha1sum -c -/);
 assert.match(workflow,/github\.event\.pull_request\.head\.sha \|\| github\.sha/);
 assert.match(workflow,/persist-credentials: false/);
-assert.match(script,/^rm -f private-artifacts\/tlc\/completed-source-only\.json/m,
-  'stale successful artifacts must be invalidated before checking');
+assert.match(script,/^rm -rf -- private-artifacts\/tlc$/m,
+  'stale successful artifacts and stale model logs must be invalidated before checking');
+assert.match(script,/model-inputs\.sha256/,
+  'source model and config files must be content hashed');
 assert.match(script,/^  if ! grep -Fx 'Error: Invariant Inv is violated\.'/m,
   'mutant must have invariant-specific failure');
 assert.match(script,/State 1:/,'mutant must have reachable trace');
@@ -64,7 +66,11 @@ try {
   };
   fs.mkdirSync(path.dirname(receipt),{recursive:true});
   fs.writeFileSync(receipt,'{"forged":"stale-success"}\n');
+  fs.writeFileSync('private-artifacts/tlc/ActorIsolation.baseline.log',
+    'FORGED HISTORICAL BASELINE SUCCESS\n');
   reject('stale receipt and invalid jar',{},/FAILED|computed checksum did NOT match/i);
+  assert.equal(fs.existsSync('private-artifacts/tlc/ActorIsolation.baseline.log'),false,
+    'prior model log must not be incorporated into a future receipt');
   reject('missing jar',{TLA2TOOLS_JAR:path.join(tmp,'missing.jar')},/TLC_JAR_MISSING/);
   reject('missing source head',{EXPECTED_HEAD:''},/source HEAD is required/);
   reject('invalid source head',{EXPECTED_HEAD:'not-a-full-sha'},/Invalid source SHA/);
