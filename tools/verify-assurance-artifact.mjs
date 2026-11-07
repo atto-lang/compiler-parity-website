@@ -5,9 +5,10 @@
  */
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
 import {inflateRawSync} from 'node:zlib';
 import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {GitHubReadOnly} from './collect-assurance.mjs';
 import {verifyLiveCandidate, validatePin} from './verify-assurance-receipt.mjs';
 
@@ -160,6 +161,60 @@ function jsonOf(entries,name) {
 const MODELS=['ActorIsolation','CancellationAwait','HotReloadFencing',
   'ReliablePubSub','ActorBorrowGeneration'];
 const MUTATIONS=['overlap','stale','read-transfer'];
+const MODEL_INPUTS=Object.freeze([
+  ...MODELS.map(x=>'formal/specs/'+x+'.tla'),
+  ...[...MODELS.map(x=>'formal/specs/'+x+'.cfg'),
+    ...MUTATIONS.map(x=>'formal/specs/ActorBorrowGeneration.'+x+'-mutant.cfg')],
+  'tools/run-tlc-assurance.sh'
+]);
+function parseHashManifest(manifest, expectedPaths, scope) {
+  const lines=manifest.trimEnd().split('\n');
+  const remaining=new Set(expectedPaths);
+  must(lines.length===remaining.size, scope+' hash manifest cardinality mismatch');
+  for(const line of lines){
+    const match=/^([a-f0-9]{64})  ([A-Za-z0-9._/-]+)$/.exec(line);
+    must(match && remaining.delete(match[2]),
+      scope+' hash manifest has a missing, repeated or unexpected path');
+  }
+  must(remaining.size===0,scope+' hash manifest incomplete');
+}
+function checkTlcParserLog(text,model){
+  must(text.includes('Parsing file') &&
+    text.includes('Semantic processing of module '+model) &&
+    !/(?:^|\n)\s*(?:Error:|Exception in thread|\*\*\* Error)/m.test(text),
+    'TLC/SANY parser or semantic pass not demonstrated: '+model);
+}
+function checkTlcBaselineLog(text,model){
+  const success='Model checking completed. No error has been found.';
+  const match=/^([0-9]+) states generated, ([0-9]+) distinct states found, ([0-9]+) states left on queue\.$/m.exec(text);
+  must(text.includes('TLC2 Version') &&
+    text.split(success).length===2 &&
+    match && Number(match[1])>=Number(match[2]) &&
+    Number(match[2])>0 && Number(match[3])===0 &&
+    /^Finished in [^\n]{1,100} at \([^)]+\)$/m.test(text) &&
+    !/(?:^|\n)\s*(?:Error:|Exception in thread|\*\*\* Error)/m.test(text),
+    'TLC baseline lacks genuine full-search success markers: '+model);
+}
+function checkTlcCounterexample(text,mutation){
+  must(text.includes('TLC2 Version') &&
+    (text.match(/^Error: Invariant Inv is violated\.$/gm)||[]).length===1 &&
+    text.includes('Error: The behavior up to this point is:') &&
+    /^State 1: .+/m.test(text) &&
+    !text.includes('Model checking completed. No error has been found.') &&
+    !/(?:^|\n)\s*(?:Exception in thread|\*\*\* Error)/m.test(text),
+    'TLC mutation lacks invariant violation plus state trace: '+mutation);
+}
+function verifyGuestXmlWithJava(xml){
+  const source=fileURLToPath(new URL('./VerifyArtifactGuestSurefire.java',import.meta.url));
+  const result=spawnSync('java',['--source','21',source],{
+    input:xml,encoding:'utf8',timeout:30000,maxBuffer:131072,
+    shell:false,windowsHide:true
+  });
+  must(!result.error && result.status===0 &&
+    result.stdout.trim()==='VALID_GUEST_SUREFIRE_XML tests=8',
+    'Java guest Surefire XML structural validation rejected');
+}
+
 export function receiptFromArtifact(pin,entries) {
   const isTlc=pin.kind==='TLC_BOUNDED_MODEL_ONLY';
   const receipt=jsonOf(entries,isTlc?'completed-source-only.json':'suite-gate-completed.json');
@@ -186,14 +241,23 @@ export function receiptFromArtifact(pin,entries) {
       expected.delete(match[2]);
     }
     must(expected.size===0,'missing TLC log evidence');
-    for(const mutation of MUTATIONS) {
-      const t=textOf(entries,'ActorBorrowGeneration.'+mutation+'.counterexample.log');
-      must(t.includes('Error: Invariant Inv is violated.') &&
-        t.includes('Error: The behavior up to this point is:') &&
-        /^State 1:/m.test(t), 'TLC counterexample trace missing');
+    for(const model of MODELS){
+      checkTlcParserLog(textOf(entries,model+'.parse.log'),model);
+      checkTlcBaselineLog(textOf(entries,model+'.baseline.log'),model);
     }
-    textOf(entries,'model-inputs.sha256');
-    textOf(entries,'java-version.txt');
+    for(const mutation of MUTATIONS)
+      checkTlcCounterexample(
+        textOf(entries,'ActorBorrowGeneration.'+mutation+'.counterexample.log'),
+        mutation);
+    must(typeof pin.modelInputManifestSha256==='string' &&
+      /^[a-f0-9]{64}$/.test(pin.modelInputManifestSha256),
+      'independently prepared TLC input-manifest hash pin missing');
+    const sourceManifest=textOf(entries,'model-inputs.sha256');
+    must(hash(Buffer.from(sourceManifest,'utf8'))===pin.modelInputManifestSha256,
+      'TLC input manifest digest differs from trusted reviewer pin');
+    parseHashManifest(sourceManifest,MODEL_INPUTS,'TLC source');
+    must(textOf(entries,'java-version.txt').includes('version'),
+      'Java runtime identity missing');
   } else {
     const src=textOf(entries,'fixture-sha256.txt');
     must(src.split('\n').some(l=>l.startsWith(pin.fixtureSha256+
@@ -210,9 +274,7 @@ export function receiptFromArtifact(pin,entries) {
       String(checkout.attempt)===String(pin.attempt) &&
       checkout.job===pin.jobKey, 'Java checkout evidence mismatch');
     const xml=textOf(entries,'TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml');
-    must(xml.includes('CriticalActorGuestExecutionTest') &&
-      !/<(?:failure|error|skipped)(?:\s|>)/i.test(xml),
-      'missing/failed Java guest XML candidate');
+    verifyGuestXmlWithJava(xml);
   }
   return receipt;
 }
