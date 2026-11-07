@@ -38,6 +38,16 @@ const guestXml=()=>{
     JAVA_GUEST_NAMES.map(name=>'<testcase classname="'+suite+
       '" name="'+name+'"/>').join('')+'</testsuite>';
 };
+const JAVA_SUITE_REQUIRED=Object.freeze({
+  "dev.oreslang.CriticalActorGuestExecutionTest":["actorCriticalGuestReturnsExpectedValueAndReleasesBeforeStop","earlyReturnInsideCriticalReleasesGuardBeforeActorStop","canonicalAttoActorCriticalGuestMatchesLegacyGuestOutput","canonicalAttoEarlyReturnGuestReleasesBeforeStop","canonicalAttoGuestOutputTracksARealSourceMutation","canonicalAttoGuestCriticalBodyMutationChangesOutput","canonicalAttoGuestSourceMutationWorksInBothDirections","unverifiedFreeFunctionCriticalSourceDoesNotExecute"],
+  "dev.oreslang.ActorBorrowCompilerAdmissionTest":["twoSharedBorrowsCanCoexistWithoutExclusiveWriter","independentExclusiveBorrowIsAllowedWhenNoReadLoanExists","exclusiveWriterIsRejectedWhenTwoReadBorrowsAreLive","ownershipTransferFailsWhileSharedBorrowIsLive","sourceOwnerIsUnusableAfterRtTakeMove","evenOneSharedReaderBlocksExclusiveWriter","exclusiveWriterBlocksNewSharedReader","secondExclusiveWriterIsNeverAdmitted","reassignmentOfOwnerDuringReadBorrowIsRejected","lexicalReadBorrowReleaseAllowsLaterExclusiveWriter","lexicalExclusiveBorrowReleaseAllowsLaterReader","lexicalReadBorrowReleaseAllowsOwnershipTake","doubleRtTakeOfSameOwnedBindingIsRejected"],
+  "dev.oreslang.CriticalSuspendsV1SyntaxTest":["concurrentRetypingCannotPublishPartialTaskEpochBeforeCriticalAdmission","newerConcurrentOwnershipAttemptSupersedesBlockedOlderAttempt","criticalTaskPublicationIsAtomicAgainstConcurrentTypingRevocation"],
+  "dev.oreslang.TaskCaptureAdmissionIdentityTest":["rawHostAstAndForgedEpochCannotPublishTaskCaptures","untypedNoncriticalTaskCannotAcquireExecutableOwnership","successfulTypeRecheckRevokesPreviouslyExecutableNoncriticalTask","failedTypeRecheckRevokesPreviouslyExecutableNoncriticalTask","publicStagedCapturePublisherCannotMintTaskTransferAuthority"],
+  "dev.oreslang.nodes.CriticalTicketCleanupTest":["immediateTicketIsReleasedAfterFailedSchedulerTransition","queuedTicketIsRetractedWithoutReleasingAnotherOwner","retiredAdmissionIsSafeToUnwind","cancellationRacingWithPromotionCannotLeakActorOwnedTicket"],
+  "dev.oreslang.CriticalBodyEffectsTest":[],
+  "dev.oreslang.runtime.CriticalGateTest":[],
+  "dev.oreslang.runtime.ActorCriticalGateIdentityTest":[]
+});
 function crc32(b) {
   let c=0xffffffff;
   for(const x of b){c^=x;for(let i=0;i<8;i++)c=(c>>>1)^(0xedb88320&-(c&1));}
@@ -126,6 +136,18 @@ function javaFiles(p=pin(JAVA_KIND)){
     proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
     head:p.head,tree:p.tree,run_id:String(p.runId),attempt:String(p.attempt),
     job:p.jobKey,compiler_class_sha256:p.compilerSha256,fixture_sha256:p.fixtureSha256};
+  const xmlRows=Object.entries(JAVA_SUITE_REQUIRED).map(([suite,required])=>{
+    const names=required.length>0?required:['successfulSuiteSmoke'];
+    const xml=suite==='dev.oreslang.CriticalActorGuestExecutionTest'
+      ? guestXml()
+      : '<testsuite name="'+suite+'" tests="'+names.length+
+        '" failures="0" errors="0" skipped="0">'+
+        names.map(name=>'<testcase classname="'+suite+'" name="'+name+'"/>').join('')+
+        '</testsuite>';
+    return ['TEST-'+suite+'.xml',xml];
+  });
+  const xmlManifest=xmlRows.map(([name,xml])=>
+    sha(Buffer.from(xml))+'  '+name).join('\n')+'\n';
   return [
     ['suite-gate-completed.json',JSON.stringify(receipt)],
     ['checkout.json',JSON.stringify({proof:'NOT_INDEPENDENTLY_VERIFIED',
@@ -135,8 +157,14 @@ function javaFiles(p=pin(JAVA_KIND)){
       '  examples/critical-actor-checked-v1.atto\n'],
     ['compiler-class-sha256.txt',p.compilerSha256+
       '  target/classes/dev/oreslang/compiler/OresCompiler.class\n'],
-    ['TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml',guestXml()]
+    ['surefire-xml-sha256.txt',xmlManifest],
+    ...xmlRows
   ];
+}
+function rehashJavaXmlManifest(files){
+  const rows=files.filter(([n])=>n.startsWith('TEST-')&&n.endsWith('.xml'));
+  files.find(([n])=>n==='surefire-xml-sha256.txt')[1]=
+    rows.map(([n,xml])=>sha(Buffer.from(xml))+'  '+n).join('\n')+'\n';
 }
 function fixture(p,bytes){
   const artifact={id:76,name:expectedArtifactName(p),
@@ -248,6 +276,7 @@ test('Java forged compiler hash, missing XML and failed XML rejected',()=>{
   assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(missing))),/ARTIFACT_REJECTED/);
   const failed=javaFiles(p);failed.find(x=>x[0].endsWith('.xml'))[1]=
     '<testsuite><failure>oops</failure></testsuite>';
+  rehashJavaXmlManifest(failed);
   assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(failed))),/ARTIFACT_REJECTED/);
 });
 
@@ -366,6 +395,7 @@ test('Java guest XML needs eight exact direct passing cases, not a forged test c
   ]){
     const list=javaFiles(p);
     list.find(x=>x[0]===xmlName)[1]=forged;
+    rehashJavaXmlManifest(list);
     assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
   }
 });
@@ -438,4 +468,49 @@ test('ZIP64 extra field and truncated ZIP extra header rejected even with ordina
   };
   assert.throws(()=>inspectZip(withExtra(1,0)),/ARTIFACT_REJECTED/);
   assert.throws(()=>inspectZip(withExtra(0x5455,5)),/ARTIFACT_REJECTED/);
+});
+
+test('independent eight-suite Java evidence rejects missing secondary source-checker XML',()=>{
+  const p=pin(JAVA_KIND),files=javaFiles(p);
+  const missing=files.filter(([n])=>n!=='TEST-dev.oreslang.ActorBorrowCompilerAdmissionTest.xml');
+  assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(missing))),/ARTIFACT_REJECTED/);
+});
+test('valid-hash Java borrow report cannot hide missing or duplicate required methods',()=>{
+  const p=pin(JAVA_KIND);
+  for(const [from,to] of [
+    ['sourceOwnerIsUnusableAfterRtTakeMove','unexpectedFakeBorrowCheck'],
+    ['twoSharedBorrowsCanCoexistWithoutExclusiveWriter','exclusiveWriterBlocksNewSharedReader']
+  ]){
+    const files=javaFiles(p),borrow=files.find(([n])=>
+      n==='TEST-dev.oreslang.ActorBorrowCompilerAdmissionTest.xml');
+    borrow[1]=borrow[1].replace(from,to);
+    rehashJavaXmlManifest(files);
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(files))),/ARTIFACT_REJECTED/);
+  }
+});
+test('Java XML evidence rejects zero-test optional suite and false pass-only count',()=>{
+  const p=pin(JAVA_KIND);
+  for(const mutate of [
+    xml=>xml.replace('tests="1"','tests="0"'),
+    xml=>xml.replace('skipped="0"','skipped="1"'),
+    xml=>xml.replace('<testcase','<failure/><testcase')
+  ]){
+    const files=javaFiles(p),optional=files.find(([n])=>
+      n==='TEST-dev.oreslang.runtime.CriticalGateTest.xml');
+    optional[1]=mutate(optional[1]);
+    rehashJavaXmlManifest(files);
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(files))),/ARTIFACT_REJECTED/);
+  }
+});
+test('Java SHA256 manifest rejects omitted, duplicated or unrecognized XML identities',()=>{
+  const p=pin(JAVA_KIND);
+  const duplicate=javaFiles(p);
+  duplicate.find(([n])=>n==='surefire-xml-sha256.txt')[1]+=
+    duplicate.find(([n])=>n==='surefire-xml-sha256.txt')[1].split('\n')[0]+'\n';
+  assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(duplicate))),/ARTIFACT_REJECTED/);
+  const wrong=javaFiles(p);
+  wrong.find(([n])=>n==='surefire-xml-sha256.txt')[1]=
+    wrong.find(([n])=>n==='surefire-xml-sha256.txt')[1]
+      .replace('TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml','TEST-dev.oreslang.Untrusted.xml');
+  assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(wrong))),/ARTIFACT_REJECTED/);
 });
