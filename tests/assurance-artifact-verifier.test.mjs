@@ -420,3 +420,22 @@ test('ZIP local CRC, size, flags, and streaming descriptors cannot contradict ce
   mutated.writeUInt32LE(0,dAt-12);
   assert.throws(()=>inspectZip(mutated),/ARTIFACT_REJECTED/);
 });
+
+test('ZIP64 extra field and truncated ZIP extra header rejected even with ordinary sizes',()=>{
+  const clean=zip([['bounded.txt','abc']]);
+  const eocd=clean.length-22;
+  const centralAt=clean.readUInt32LE(eocd+16);
+  const nameLen=clean.readUInt16LE(centralAt+28);
+  const centralEnd=centralAt+46+nameLen;
+  assert.equal(centralEnd,eocd);
+  const withExtra=(type,declaredLength)=>{
+    const extra=Buffer.alloc(4);
+    extra.writeUInt16LE(type,0);extra.writeUInt16LE(declaredLength,2);
+    const output=Buffer.concat([clean.subarray(0,eocd),extra,clean.subarray(eocd)]);
+    output.writeUInt16LE(4,centralAt+30);
+    output.writeUInt32LE(clean.readUInt32LE(eocd+12)+4,eocd+4+12);
+    return output;
+  };
+  assert.throws(()=>inspectZip(withExtra(1,0)),/ARTIFACT_REJECTED/);
+  assert.throws(()=>inspectZip(withExtra(0x5455,5)),/ARTIFACT_REJECTED/);
+});
