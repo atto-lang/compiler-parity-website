@@ -46,8 +46,13 @@ to `formal/specs` so a relative JAR path cannot point somewhere else at
 execution time. Before running TLC, it verifies that every `.tla` and `.cfg`
 under the checked directory is a tracked, non-symlink Git file. That protects
 the exact-tree claim from injected untracked model inputs or external linked
-source files. These are source-side checks until a runner actually executes
-them. The negative harness now includes 16 admission-rejection cases.
+source files. Furthermore, every such input's on-disk Git blob hash
+must equal `HEAD:<path>` directly. This catches an `assume-unchanged` or
+`skip-worktree` mutation that a conventional `git status` may omit.
+These are source-side checks until a runner actually executes them. The
+negative harness now includes **17** admission-rejection cases, including
+one test that creates an isolated scratch Git repository and deliberately
+mutates an `assume-unchanged` tracked model while Git status stays clean.
 
 The runner clears `completed-source-only.json` **before** validation starts.
 It writes the completion record only after five baseline models and three
