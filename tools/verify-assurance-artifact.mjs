@@ -1,0 +1,257 @@
+#!/usr/bin/env node
+/** Trusted-reviewer-only verification of GitHub artifact ZIP bytes.
+ * The ZIP comes from a reviewer download; GitHub API digest and immutable
+ * workflow metadata are fetched separately. This is NEVER guest proof.
+ */
+import {createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {inflateRawSync} from 'node:zlib';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {GitHubReadOnly} from './collect-assurance.mjs';
+import {verifyLiveCandidate, validatePin} from './verify-assurance-receipt.mjs';
+
+const MAX_ZIP = 16 * 1024 * 1024;
+const MAX_MEMBER = 2 * 1024 * 1024;
+const MAX_TOTAL = 16 * 1024 * 1024;
+const MAX_MEMBERS = 80;
+const DECODER = new TextDecoder('utf-8', {fatal:true});
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const fail = reason => {throw Error('ARTIFACT_REJECTED: '+reason);};
+const must = (ok, reason) => {if (!ok) fail(reason);};
+const safeUInt = x => Number.isSafeInteger(x) && x > 0;
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let i=0; i<8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function pathIsSafe(name) {
+  if (!/^[A-Za-z0-9._/-]+$/.test(name) || name.startsWith('/') ||
+      name.includes('//')) return false;
+  return name.split('/').every(part => part !== '.' && part !== '..');
+}
+/** Decode a deliberately bounded ZIP subset. No extraction or filesystem writes.
+ * Reject ZIP64, multidisk, links, encryption, duplicate/colliding names,
+ * trailing data, oversized payloads, corrupted CRC, or unsupported methods.
+ */
+export function inspectZip(bytes) {
+  must(Buffer.isBuffer(bytes) && bytes.length >= 22 && bytes.length <= MAX_ZIP,
+    'missing or oversized ZIP');
+  let eocd=-1;
+  for(let i=bytes.length-22; i>=Math.max(0,bytes.length-65557); i--) {
+    if (bytes.readUInt32LE(i)===0x06054b50 &&
+        i+22+bytes.readUInt16LE(i+20)===bytes.length) {eocd=i;break;}
+  }
+  must(eocd>=0, 'ZIP end record missing or trailing bytes');
+  const disk=bytes.readUInt16LE(eocd+4), centralDisk=bytes.readUInt16LE(eocd+6);
+  const onDisk=bytes.readUInt16LE(eocd+8), count=bytes.readUInt16LE(eocd+10);
+  const centralSize=bytes.readUInt32LE(eocd+12), centralAt=bytes.readUInt32LE(eocd+16);
+  must(disk===0 && centralDisk===0 && onDisk===count &&
+    count>0 && count<=MAX_MEMBERS && count!==65535 &&
+    centralSize!==0xffffffff && centralAt!==0xffffffff &&
+    centralAt+centralSize===eocd, 'unsupported ZIP layout or entry count');
+  const result=new Map(), seenNames=new Set(), usedRanges=[];
+  let cursor=centralAt, total=0;
+  for(let n=0;n<count;n++) {
+    must(cursor+46<=eocd && bytes.readUInt32LE(cursor)===0x02014b50,
+      'invalid central-directory record');
+    const madeBy=bytes.readUInt16LE(cursor+4);
+    const flags=bytes.readUInt16LE(cursor+8), method=bytes.readUInt16LE(cursor+10);
+    const storedCrc=bytes.readUInt32LE(cursor+16);
+    const compressed=bytes.readUInt32LE(cursor+20), uncompressed=bytes.readUInt32LE(cursor+24);
+    const nameLen=bytes.readUInt16LE(cursor+28), extraLen=bytes.readUInt16LE(cursor+30);
+    const commentLen=bytes.readUInt16LE(cursor+32), startDisk=bytes.readUInt16LE(cursor+34);
+    const external=bytes.readUInt32LE(cursor+38), local=bytes.readUInt32LE(cursor+42);
+    const next=cursor+46+nameLen+extraLen+commentLen;
+    must(next<=eocd && startDisk===0 && nameLen>0 &&
+      compressed<=MAX_ZIP && uncompressed<=MAX_MEMBER &&
+      method!==99 && (method===0 || method===8) &&
+      (flags & 0x0001)===0 && compressed!==0xffffffff &&
+      uncompressed!==0xffffffff && local!==0xffffffff,
+      'invalid/oversized/encrypted ZIP member');
+    let name;
+    try {name=DECODER.decode(bytes.subarray(cursor+46,cursor+46+nameLen));}
+    catch {fail('non-UTF8 ZIP name');}
+    must(pathIsSafe(name) && !name.endsWith('/') &&
+      !seenNames.has(name.toLowerCase()), 'unsafe/duplicate ZIP path');
+    seenNames.add(name.toLowerCase());
+    if ((madeBy>>>8)===3) {
+      const kind=(external>>>16) & 0o170000;
+      must(kind===0 || kind===0o100000, 'ZIP symlink or non-regular file');
+    }
+    must(local+30<=centralAt && bytes.readUInt32LE(local)===0x04034b50,
+      'missing ZIP local header');
+    const localFlags=bytes.readUInt16LE(local+6), localMethod=bytes.readUInt16LE(local+8);
+    const localNameLen=bytes.readUInt16LE(local+26), localExtra=bytes.readUInt16LE(local+28);
+    const dataAt=local+30+localNameLen+localExtra;
+    must(localFlags===flags && localMethod===method &&
+      localNameLen===nameLen && dataAt+compressed<=centralAt &&
+      bytes.subarray(local+30,local+30+nameLen).equals(
+        bytes.subarray(cursor+46,cursor+46+nameLen)),
+      'mismatched/overrunning ZIP local header');
+    must(!usedRanges.some(([a,b])=>dataAt < b && dataAt+compressed > a),
+      'overlapping ZIP member data');
+    usedRanges.push([local,dataAt+compressed]);
+    total+=uncompressed;
+    must(total<=MAX_TOTAL, 'uncompressed ZIP budget exceeded');
+    const packed=bytes.subarray(dataAt,dataAt+compressed);
+    let payload;
+    try {payload=method===0?packed:inflateRawSync(packed,{maxOutputLength:MAX_MEMBER+1});}
+    catch {fail('ZIP inflation failed or exceeded limit');}
+    must(payload.length===uncompressed && crc32(payload)===storedCrc,
+      'ZIP size/CRC mismatch');
+    result.set(name,Buffer.from(payload));
+    cursor=next;
+  }
+  must(cursor===eocd, 'unexpected central-directory bytes');
+  return result;
+}
+export function expectedArtifactName(pin) {
+  validatePin(pin);
+  return pin.kind==='TLC_BOUNDED_MODEL_ONLY'
+    ? 'tlc-bounded-source-only-'+pin.runId+'-'+pin.attempt
+    : 'java-truffle-atto-guest-source-only-receipt-'+pin.runId+'-'+pin.attempt;
+}
+export function validateArtifactMetadata(pin, record, listing, run) {
+  const expected=expectedArtifactName(pin);
+  must(listing && Array.isArray(listing.artifacts) &&
+    listing.total_count===listing.artifacts.length &&
+    listing.artifacts.length<100, 'incomplete artifact listing');
+  const matches=listing.artifacts.filter(x=>x?.name===expected);
+  must(matches.length===1, 'missing or duplicate expected artifact');
+  const artifact=matches[0];
+  must(run?.id===pin.runId && run?.head_sha===pin.head &&
+    run?.repository?.full_name===pin.repo &&
+    safeUInt(run.repository.id) &&
+    safeUInt(pin.repositoryId) && run.repository.id===pin.repositoryId,
+    'run repository binding absent or mismatched');
+  must(safeUInt(artifact.id) && artifact.expired===false &&
+    safeUInt(artifact.size_in_bytes) && artifact.size_in_bytes<=MAX_ZIP &&
+    artifact.workflow_run?.id===pin.runId &&
+    artifact.workflow_run?.head_sha===pin.head &&
+    artifact.workflow_run?.repository_id===pin.repositoryId &&
+    artifact.workflow_run?.head_repository_id===pin.repositoryId,
+    'artifact origin, liveness or size mismatch');
+  must(artifact.archive_download_url===
+    'https://api.github.com/repos/'+pin.repo+'/actions/artifacts/'+artifact.id+'/zip',
+    'artifact API download URL mismatch');
+  must(/^sha256:[a-f0-9]{64}$/.test(artifact.digest),
+    'missing official GitHub SHA256 artifact digest');
+  return artifact;
+}
+function textOf(entries,name) {
+  const bytes=entries.get(name);
+  must(bytes && bytes.length>0 && bytes.length<=MAX_MEMBER,
+    'required artifact file missing: '+name);
+  try {return DECODER.decode(bytes);}
+  catch {fail('artifact file not valid UTF8: '+name);}
+}
+function jsonOf(entries,name) {
+  let parsed;
+  try {parsed=JSON.parse(textOf(entries,name));}
+  catch {fail('invalid artifact JSON: '+name);}
+  must(parsed && typeof parsed==='object' && !Array.isArray(parsed),
+    'invalid artifact JSON object: '+name);
+  return parsed;
+}
+const MODELS=['ActorIsolation','CancellationAwait','HotReloadFencing',
+  'ReliablePubSub','ActorBorrowGeneration'];
+const MUTATIONS=['overlap','stale','read-transfer'];
+export function receiptFromArtifact(pin,entries) {
+  const isTlc=pin.kind==='TLC_BOUNDED_MODEL_ONLY';
+  const receipt=jsonOf(entries,isTlc?'completed-source-only.json':'suite-gate-completed.json');
+  if(isTlc) {
+    const prov=jsonOf(entries,'provenance.json');
+    must(prov.scope==='TLC_BOUNDED_MODEL_ONLY' &&
+      prov.guest==='NOT_EXECUTED' && prov.head===pin.head &&
+      prov.tree===pin.tree && prov.jar_sha256===pin.toolSha256 &&
+      String(prov.run_id)===String(pin.runId) &&
+      String(prov.run_attempt)===String(pin.attempt) &&
+      prov.job===pin.jobKey, 'TLC runtime provenance mismatch');
+    const manifest=textOf(entries,'logs.sha256');
+    const lines=manifest.trimEnd().split('\n');
+    const expected=new Set([
+      ...MODELS.flatMap(x=>[x+'.parse.log',x+'.baseline.log']),
+      ...MUTATIONS.map(x=>'ActorBorrowGeneration.'+x+'.counterexample.log')
+    ]);
+    must(lines.length===expected.size,'TLC log-manifest cardinality mismatch');
+    for(const line of lines){
+      const match=/^([a-f0-9]{64})  private-artifacts\/tlc\/([A-Za-z0-9._-]+\.log)$/.exec(line);
+      must(match && expected.has(match[2]),'TLC log manifest has unknown entry');
+      const bytes=entries.get(match[2]);
+      must(bytes && hash(bytes)===match[1], 'TLC log digest mismatch: '+match[2]);
+      expected.delete(match[2]);
+    }
+    must(expected.size===0,'missing TLC log evidence');
+    for(const mutation of MUTATIONS) {
+      const t=textOf(entries,'ActorBorrowGeneration.'+mutation+'.counterexample.log');
+      must(t.includes('Error: Invariant Inv is violated.') &&
+        t.includes('Error: The behavior up to this point is:') &&
+        /^State 1:/m.test(t), 'TLC counterexample trace missing');
+    }
+    textOf(entries,'model-inputs.sha256');
+    textOf(entries,'java-version.txt');
+  } else {
+    const src=textOf(entries,'fixture-sha256.txt');
+    must(src.split('\n').some(l=>l.startsWith(pin.fixtureSha256+
+      '  examples/critical-actor-checked-v1.atto')),
+      'canonical fixture file hash not corroborated');
+    const cls=textOf(entries,'compiler-class-sha256.txt');
+    must(cls.split('\n').some(l=>l.startsWith(pin.compilerSha256+
+      '  target/classes/dev/oreslang/compiler/OresCompiler.class')),
+      'compiled compiler-class hash not corroborated');
+    const checkout=jsonOf(entries,'checkout.json');
+    must(checkout.source_head===pin.head && checkout.source_tree===pin.tree &&
+      checkout.proof==='NOT_INDEPENDENTLY_VERIFIED' &&
+      String(checkout.run_id)===String(pin.runId) &&
+      String(checkout.attempt)===String(pin.attempt) &&
+      checkout.job===pin.jobKey, 'Java checkout evidence mismatch');
+    const xml=textOf(entries,'TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml');
+    must(xml.includes('CriticalActorGuestExecutionTest') &&
+      !/<(?:failure|error|skipped)(?:\s|>)/i.test(xml),
+      'missing/failed Java guest XML candidate');
+  }
+  return receipt;
+}
+export async function verifyArtifactCandidate(api,pin,zipBytes) {
+  validatePin(pin);
+  const [listing,run]=await Promise.all([
+    api.get('/repos/'+pin.repo+'/actions/runs/'+pin.runId+'/artifacts?per_page=100'),
+    api.get('/repos/'+pin.repo+'/actions/runs/'+pin.runId)
+  ]);
+  const record=validateArtifactMetadata(pin,null,listing,run);
+  must(Buffer.isBuffer(zipBytes) && zipBytes.length===record.size_in_bytes,
+    'downloaded ZIP size mismatch');
+  const zipDigest=hash(zipBytes);
+  must('sha256:'+zipDigest===record.digest,'downloaded ZIP SHA256 mismatch');
+  const entries=inspectZip(zipBytes);
+  const receipt=receiptFromArtifact(pin,entries);
+  const check=await verifyLiveCandidate(api,pin,receipt);
+  return Object.freeze({
+    ...check,classification:'GITHUB_ARTIFACT_BYTES_CORROBORATED_CANDIDATE_ONLY',
+    artifactId:record.id,artifactName:record.name,artifactDigest:record.digest,
+    archiveMemberCount:entries.size,
+    artifactIntegrity:'GITHUB_API_SHA256_MATCHED',
+    artifactOrigin:'GITHUB_RUN_AND_REPO_METADATA_MATCHED',
+    receiptAuthenticity:'GITHUB_ARCHIVE_DIGEST_CORROBORATED_NOT_SIGNED',
+    guestExecution:'NOT_INDEPENDENTLY_VERIFIED',
+    proof:'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED'
+  });
+}
+async function main(){
+  if(process.argv.length!==4)throw Error(
+    'Usage: ASSURANCE_READ_TOKEN=... node tools/verify-assurance-artifact.mjs <trusted-pin.json> <original-artifact.zip>');
+  const token=process.env.ASSURANCE_READ_TOKEN;
+  if(!token)throw Error('ASSURANCE_READ_TOKEN required');
+  const [pin,archive]=await Promise.all([
+    readFile(resolve(process.argv[2]),'utf8').then(JSON.parse),
+    readFile(resolve(process.argv[3]))
+  ]);
+  console.log(JSON.stringify(await verifyArtifactCandidate(
+    new GitHubReadOnly(token),pin,archive),null,2));
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
+  main().catch(e=>{console.error(String(e.message||e));process.exitCode=1;});
