@@ -61,3 +61,10 @@ test('invalid Gregorian date is rejected',()=>{
   assert.equal(P.day('2026-02-30'),null);
   assert.equal(P.day('2024-02-29'),'2024-02-29');
 });
+
+test('explicit mut spelling remains a contract, never silently certified',()=>{
+  const mut=D.fixtures.find(f=>f.id==='idb-13');
+  assert.ok(mut);
+  assert.equal(mut.kind,'contract');
+  assert.match(mut.expect,/unverified/i);
+});
