@@ -54,10 +54,11 @@ for model in ActorIsolation CancellationAwait HotReloadFencing ReliablePubSub Ac
     > "../../private-artifacts/tlc/$model.baseline.log" 2>&1
 done
 
-for mutation in overlap stale; do
+for mutation in overlap stale read-transfer; do
   case "$mutation" in
     overlap) config='ActorBorrowGeneration.overlap-mutant.cfg';;
     stale) config='ActorBorrowGeneration.stale-mutant.cfg';;
+    read-transfer) config='ActorBorrowGeneration.read-transfer-mutant.cfg';;
   esac
   output="../../private-artifacts/tlc/ActorBorrowGeneration.$mutation.counterexample.log"
   status=0
@@ -81,7 +82,7 @@ find private-artifacts/tlc -type f -name '*.log' -print0 | sort -z |
   xargs -0 sha256sum > private-artifacts/tlc/logs.sha256
 # This is a scoped, unsigned report of a completed tool invocation, not proof
 # of source-to-runtime refinement or an independently verified guest execution.
-printf '{"classification":"TLC_BOUNDED_MODEL_ONLY","verification":"UNATTESTED_TOOL_RUN","guest":"NOT_EXECUTED","baseline_models":5,"expected_invariant_counterexamples":2,"source_head":"%s","source_tree":"%s","tool_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\n' \
+printf '{"classification":"TLC_BOUNDED_MODEL_ONLY","verification":"UNATTESTED_TOOL_RUN","guest":"NOT_EXECUTED","baseline_models":5,"expected_invariant_counterexamples":3,"source_head":"%s","source_tree":"%s","tool_sha256":"%s","run_id":"%s","run_attempt":"%s","job":"%s"}\n' \
   "$EXPECTED_HEAD" "$actual_tree" "$EXPECTED_JAR_SHA256" \
   "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB" \
   > private-artifacts/tlc/completed-source-only.json
