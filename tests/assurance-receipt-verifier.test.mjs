@@ -14,6 +14,7 @@ const time='2026-11-06T10:00:00Z';
 const pin=()=>({
   repo:'example-org/private-project',pr:7,head:H,tree:T,
   runId:45,attempt:2,jobId:101,
+  workflowId:777,workflowPath:'.github/workflows/assurance-tlc.yml',
   jobName:'exact-head-tlc-safety-and-counterexamples',jobKey:'tlc-bounded-design',
   requiredSteps:[STEP_CHECKOUT,STEP_TLC],
   kind:'TLC_BOUNDED_MODEL_ONLY',toolSha256:'936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
@@ -26,7 +27,8 @@ const receipt=()=>({
   run_id:'45',run_attempt:'2',job:'tlc-bounded-design'
 });
 const step=name=>({
-  name,status:'completed',conclusion:'success',
+  name,number:(name===STEP_CHECKOUT||name===JAVA_CHECKOUT)?1:2,
+  status:'completed',conclusion:'success',
   started_at:time,completed_at:'2026-11-06T10:00:01Z'
 });
 function fixture(){
@@ -38,13 +40,19 @@ function fixture(){
     [apiBase+'/git/commits/'+H]:{tree:{sha:T}},
     [apiBase+'/actions/runs/45']:{
       id:45,event:'pull_request',head_sha:H,
+      path:'.github/workflows/assurance-tlc.yml',workflow_id:777,
+      repository:{full_name:'example-org/private-project'},
+      head_commit:{tree_id:T},
       run_attempt:2,status:'completed',conclusion:'success',
       pull_requests:[{number:7,head:{sha:H}}]
     },
     [apiBase+'/actions/runs/45/attempts/2/jobs?per_page=100']:{
       total_count:1,jobs:[{
         id:101,name:'exact-head-tlc-safety-and-counterexamples',
-        runner_id:8,status:'completed',conclusion:'success',
+        run_id:45,run_attempt:2,head_sha:H,
+        check_run_url:apiBase+'/check-runs/101',
+        runner_id:8,runner_name:'GitHub Actions 1',
+        status:'completed',conclusion:'success',
         steps:[step(STEP_CHECKOUT),step(STEP_TLC)]
       }]
     }
@@ -62,6 +70,10 @@ function fixture(){
 function asJava(f){
   f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
   f.pin.jobName='critical-guest-verification';
+  f.pin.workflowPath='.github/workflows/critical-suspends-java-admission.yml';
+  f.pin.workflowId=778;
+  f.payloads[f.base+'/actions/runs/45'].path=f.pin.workflowPath;
+  f.payloads[f.base+'/actions/runs/45'].workflow_id=778;
   f.pin.jobKey='critical-guest-verification';
   f.pin.requiredSteps=[JAVA_CHECKOUT,JAVA_TEST];
   f.pin.compilerSha256=DIGEST;
