@@ -546,3 +546,33 @@ test('otherwise valid GitHub archive cannot carry unrelated or hidden evidence f
       /ARTIFACT_REJECTED/);
   }
 });
+
+test('ZIP comments and opaque local/central extra fields cannot hide evidence',()=>{
+  const clean=zip([['one.txt','pass']]);
+  const eocd=clean.length-22,central=clean.readUInt32LE(eocd+16);
+  const note=Buffer.from('HIDDEN_EVIDENCE');
+  const withEndComment=Buffer.concat([clean,note]);
+  withEndComment.writeUInt16LE(note.length,eocd+20);
+  assert.throws(()=>inspectZip(withEndComment),/ARTIFACT_REJECTED/);
+  const withCentralComment=Buffer.concat([
+    clean.subarray(0,eocd),note,clean.subarray(eocd)]);
+  withCentralComment.writeUInt16LE(note.length,central+32);
+  withCentralComment.writeUInt32LE(
+    clean.readUInt32LE(eocd+12)+note.length,eocd+note.length+12);
+  assert.throws(()=>inspectZip(withCentralComment),/ARTIFACT_REJECTED/);
+  const extra=Buffer.from([0x55,0x54,0x00,0x00]);
+  const nameLength=clean.readUInt16LE(central+28);
+  const afterCentralName=central+46+nameLength;
+  const withCentralExtra=Buffer.concat([
+    clean.subarray(0,afterCentralName),extra,clean.subarray(afterCentralName)]);
+  withCentralExtra.writeUInt16LE(extra.length,central+30);
+  withCentralExtra.writeUInt32LE(
+    clean.readUInt32LE(eocd+12)+extra.length,eocd+extra.length+12);
+  assert.throws(()=>inspectZip(withCentralExtra),/ARTIFACT_REJECTED/);
+  const afterLocalName=30+clean.readUInt16LE(26);
+  const withLocalExtra=Buffer.concat([
+    clean.subarray(0,afterLocalName),extra,clean.subarray(afterLocalName)]);
+  withLocalExtra.writeUInt16LE(extra.length,28);
+  withLocalExtra.writeUInt32LE(central+extra.length,eocd+extra.length+16);
+  assert.throws(()=>inspectZip(withLocalExtra),/ARTIFACT_REJECTED/);
+});
