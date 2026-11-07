@@ -14,7 +14,7 @@ test('all five bounded safety reference models enumerate without violations',()=
   }
 });
 
-test('all nine known unsafe mutations yield actionable counterexample traces',()=>{
+test('all ten known unsafe mutations yield actionable counterexample traces',()=>{
   let killed=0;
   for(const [name,mutants] of Object.entries(mutationSuite)){
     for(const mutant of mutants){
@@ -25,7 +25,7 @@ test('all nine known unsafe mutations yield actionable counterexample traces',()
       killed++;
     }
   }
-  assert.equal(killed,9);
+  assert.equal(killed,10);
 });
 
 test('deepening or cutting exploration never promotes a bounded model to guest proof',()=>{
@@ -34,7 +34,7 @@ test('deepening or cutting exploration never promotes a bounded model to guest p
   assert.equal(r.guestExecution,'NOT_EXECUTED');
   assert.equal(r.unboundedProof,false);
   assert.equal(r.refinementProven,false);
-  assert.equal(r.results.filter(x=>x.killed).length,9);
+  assert.equal(r.results.filter(x=>x.killed).length,10);
   assert.equal(r.results.filter(x=>!x.mutant).length,5);
   const short=explore(models.pubsub,{maxDepth:1});
   assert.equal(short.ok,true);
@@ -65,4 +65,15 @@ test('cancellation cannot retain an undelivered queued publication',()=>{
   assert.equal(bad.ok,false);
   assert.match(bad.violation,/retained after cancellation/);
   assert.ok(bad.trace.includes('cancel-subscription'));
+});
+
+test('rt take while a shared reader is live leaves a stale reader generation',()=>{
+  const result=explore(models.actorBorrow,{mutant:'take-while-readers-active'});
+  assert.equal(result.ok,false);
+  assert.equal(result.depthTruncated,false);
+  assert.match(result.violation,/reader survives ownership generation change/);
+  assert.deepEqual(result.trace,[
+    'acquire-shared-reader',
+    'mutant-take-while-reader-active'
+  ]);
 });
