@@ -32,7 +32,7 @@ export function validatePin(pin) {
   requireEvidence(integer(pin.pr) && exactSha(pin.head) && exactSha(pin.tree),
     'invalid PR or pinned source head/tree');
   requireEvidence(integer(pin.runId) && integer(pin.attempt) &&
-    integer(pin.jobId) && validName(pin.jobName), 'invalid pinned run/job identity');
+    integer(pin.jobId) && validName(pin.jobName) && validName(pin.jobKey), 'invalid pinned run/job identity');
   requireEvidence(['TLC_BOUNDED_MODEL_ONLY','JAVA_JVM_GUEST_CANDIDATE'].includes(pin.kind),
     'unsupported evidence kind');
   requireEvidence(Array.isArray(pin.requiredSteps) && pin.requiredSteps.length >= 1 &&
@@ -60,12 +60,12 @@ export function validateCandidateReceipt(pin, receipt) {
       receipt.baseline_models===5 &&
       receipt.expected_invariant_counterexamples===3 &&
       /^[a-f0-9]{64}$/.test(receipt.tool_sha256) &&
-      receipt.job===pin.jobName,
+      receipt.job===pin.jobKey,
       'TLC scoped receipt fields missing or elevated');
   } else {
     requireEvidence(receipt.classification==='SCOPED_SUREFIRE_CASES_OBSERVED' &&
       receipt.proof==='NOT_INDEPENDENTLY_VERIFIED' &&
-      receipt.guest==='CANDIDATE_ONLY',
+      receipt.guest==='CANDIDATE_ONLY' && receipt.job===pin.jobKey,
       'Java scoped receipt fields missing or elevated');
   }
 }
@@ -138,6 +138,7 @@ export async function verifyLiveCandidate(api,pin,receipt) {
     kind:pin.kind,repo:pin.repo,pr:pin.pr,
     head:pin.head,tree:pin.tree,
     runId:pin.runId,attempt:pin.attempt,jobId:pin.jobId,
+    jobKey:pin.jobKey,jobDisplayName:pin.jobName,
     runnerId:job.runner_id,startedSteps:job.steps.filter(finishedSuccess).length,
     requiredStepsVerified:accepted
   });
