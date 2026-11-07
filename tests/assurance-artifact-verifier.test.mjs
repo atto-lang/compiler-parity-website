@@ -514,3 +514,20 @@ test('Java SHA256 manifest rejects omitted, duplicated or unrecognized XML ident
       .replace('TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml','TEST-dev.oreslang.Untrusted.xml');
   assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(wrong))),/ARTIFACT_REJECTED/);
 });
+
+test('ZIP preamble and unreferenced local-record gap must not hide payload bytes',()=>{
+  const clean=zip([['first.txt','verified one'],['second.txt','verified two']]);
+  const eocd=clean.length-22;
+  const at=clean.readUInt32LE(eocd+16);
+  const secret=Buffer.from('HIDDEN_ARCHIVE_BYTES');
+  const gap=Buffer.concat([clean.subarray(0,at),secret,clean.subarray(at)]);
+  gap.writeUInt32LE(at+secret.length,gap.length-22+16);
+  assert.throws(()=>inspectZip(gap),/ARTIFACT_REJECTED/);
+  const single=zip([['only.txt','verified']]);
+  const oldCentral=single.readUInt32LE(single.length-22+16);
+  const prefixed=Buffer.concat([secret,single]);
+  const newCentral=oldCentral+secret.length;
+  prefixed.writeUInt32LE(newCentral,prefixed.length-22+16);
+  prefixed.writeUInt32LE(secret.length,newCentral+42);
+  assert.throws(()=>inspectZip(prefixed),/ARTIFACT_REJECTED/);
+});
