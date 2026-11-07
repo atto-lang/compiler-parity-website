@@ -90,12 +90,53 @@ export function inspectZip(bytes) {
     const dataAt=local+30+localNameLen+localExtra;
     must(localFlags===flags && localMethod===method &&
       localNameLen===nameLen && dataAt+compressed<=centralAt &&
+      (flags & ~0x0808)===0 &&
       bytes.subarray(local+30,local+30+nameLen).equals(
         bytes.subarray(cursor+46,cursor+46+nameLen)),
       'mismatched/overrunning ZIP local header');
-    must(!usedRanges.some(([a,b])=>dataAt < b && dataAt+compressed > a),
-      'overlapping ZIP member data');
-    usedRanges.push([local,dataAt+compressed]);
+    // Reject unsupported ZIP64 extra data even when a malicious header avoids
+    // the usual 0xffffffff size sentinels. Reject truncated extra fields too.
+    for(const [start,length] of [
+      [cursor+46+nameLen,extraLen],[local+30+nameLen,localExtra]
+    ]){
+      const end=start+length;
+      must(end<=bytes.length,'ZIP extra-field overrun');
+      let offset=start;
+      while(offset<end) {
+        must(offset+4<=end,'truncated ZIP extra-field header');
+        const type=bytes.readUInt16LE(offset),n=bytes.readUInt16LE(offset+2);
+        must(type!==1 && offset+4+n<=end,'ZIP64 or malformed extra field');
+        offset+=4+n;
+      }
+    }
+    let memberEnd=dataAt+compressed;
+    const localCrc=bytes.readUInt32LE(local+14);
+    const localCompressed=bytes.readUInt32LE(local+18);
+    const localUncompressed=bytes.readUInt32LE(local+22);
+    if ((flags & 0x0008)!==0) {
+      // Streaming ZIPs use a data descriptor following the compressed bytes.
+      // Require its exact CRC/sizes and forbid ZIP64 length descriptors.
+      must((localCrc===0 || localCrc===storedCrc) &&
+        (localCompressed===0 || localCompressed===compressed) &&
+        (localUncompressed===0 || localUncompressed===uncompressed),
+        'inconsistent ZIP streaming local header');
+      const hasSig=memberEnd+4<=centralAt &&
+        bytes.readUInt32LE(memberEnd)===0x08074b50;
+      if(hasSig)memberEnd+=4;
+      must(memberEnd+12<=centralAt &&
+        bytes.readUInt32LE(memberEnd)===storedCrc &&
+        bytes.readUInt32LE(memberEnd+4)===compressed &&
+        bytes.readUInt32LE(memberEnd+8)===uncompressed,
+        'ZIP data descriptor missing or inconsistent');
+      memberEnd+=12;
+    } else {
+      must(localCrc===storedCrc && localCompressed===compressed &&
+        localUncompressed===uncompressed,
+        'central/local ZIP CRC or size mismatch');
+    }
+    must(!usedRanges.some(([a,b])=>local < b && memberEnd > a),
+      'overlapping ZIP local file records');
+    usedRanges.push([local,memberEnd]);
     total+=uncompressed;
     must(total<=MAX_TOTAL, 'uncompressed ZIP budget exceeded');
     const packed=bytes.subarray(dataAt,dataAt+compressed);
@@ -186,8 +227,145 @@ function checkTlcParserLog(text,model){
 }
 function checkTlcBaselineLog(text,model){
   const success='Model checking completed. No error has been found.';
-  const match=/^([0-9]+) states generated, ([0-9]+) distinct states found, ([0-9]+) states left on queue\.$/m.exec(text);
-  const counts=match ? match.slice(1).map(Number) : [];
+  // TLC emits comma-grouped state counts once its search grows beyond 999.
+  // Accept both conventional decimal and correctly grouped decimal, but
+  // never accept malformed commas or integers beyond JS safe precision.
+  const integerText='(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)';
+  const regex=new RegExp('^('+integerText+') states generated, ('+integerText+
+    ') distinct states found, ('+integerText+') states left on queue\\.
+  must(text.includes('TLC2 Version') &&
+    text.split(success).length===2 &&
+    counts.length===3 && counts.every(Number.isSafeInteger) &&
+    counts[0]>=counts[1] && counts[1]>0 && counts[2]===0 &&
+    /^Finished in [^\n]{1,100} at \([^)]+\)$/m.test(text) &&
+    !/(?:^|\n)\s*(?:Error:|Exception in thread|\*\*\* Error)/m.test(text),
+    'TLC baseline lacks genuine full-search success markers: '+model);
+}
+function checkTlcCounterexample(text,mutation){
+  must(text.includes('TLC2 Version') &&
+    (text.match(/^Error: Invariant Inv is violated\.$/gm)||[]).length===1 &&
+    text.includes('Error: The behavior up to this point is:') &&
+    /^State 1: .+/m.test(text) &&
+    !text.includes('Model checking completed. No error has been found.') &&
+    !/(?:^|\n)\s*(?:Exception in thread|\*\*\* Error)/m.test(text),
+    'TLC mutation lacks invariant violation plus state trace: '+mutation);
+}
+function verifyGuestXmlWithJava(xml){
+  const source=fileURLToPath(new URL('./VerifyArtifactGuestSurefire.java',import.meta.url));
+  const result=spawnSync('java',['--source','21',source],{
+    input:xml,encoding:'utf8',timeout:30000,maxBuffer:131072,
+    shell:false,windowsHide:true
+  });
+  must(!result.error && result.status===0 &&
+    result.stdout.trim()==='VALID_GUEST_SUREFIRE_XML tests=8',
+    'Java guest Surefire XML structural validation rejected');
+}
+
+export function receiptFromArtifact(pin,entries) {
+  const isTlc=pin.kind==='TLC_BOUNDED_MODEL_ONLY';
+  const receipt=jsonOf(entries,isTlc?'completed-source-only.json':'suite-gate-completed.json');
+  if(isTlc) {
+    const prov=jsonOf(entries,'provenance.json');
+    must(prov.scope==='TLC_BOUNDED_MODEL_ONLY' &&
+      prov.guest==='NOT_EXECUTED' && prov.head===pin.head &&
+      prov.tree===pin.tree && prov.jar_sha256===pin.toolSha256 &&
+      String(prov.run_id)===String(pin.runId) &&
+      String(prov.run_attempt)===String(pin.attempt) &&
+      prov.job===pin.jobKey, 'TLC runtime provenance mismatch');
+    const manifest=textOf(entries,'logs.sha256');
+    const lines=manifest.trimEnd().split('\n');
+    const expected=new Set([
+      ...MODELS.flatMap(x=>[x+'.parse.log',x+'.baseline.log']),
+      ...MUTATIONS.map(x=>'ActorBorrowGeneration.'+x+'.counterexample.log')
+    ]);
+    must(lines.length===expected.size,'TLC log-manifest cardinality mismatch');
+    for(const line of lines){
+      const match=/^([a-f0-9]{64})  private-artifacts\/tlc\/([A-Za-z0-9._-]+\.log)$/.exec(line);
+      must(match && expected.has(match[2]),'TLC log manifest has unknown entry');
+      const bytes=entries.get(match[2]);
+      must(bytes && hash(bytes)===match[1], 'TLC log digest mismatch: '+match[2]);
+      expected.delete(match[2]);
+    }
+    must(expected.size===0,'missing TLC log evidence');
+    for(const model of MODELS){
+      checkTlcParserLog(textOf(entries,model+'.parse.log'),model);
+      checkTlcBaselineLog(textOf(entries,model+'.baseline.log'),model);
+    }
+    for(const mutation of MUTATIONS)
+      checkTlcCounterexample(
+        textOf(entries,'ActorBorrowGeneration.'+mutation+'.counterexample.log'),
+        mutation);
+    must(typeof pin.modelInputManifestSha256==='string' &&
+      /^[a-f0-9]{64}$/.test(pin.modelInputManifestSha256),
+      'independently prepared TLC input-manifest hash pin missing');
+    const sourceManifest=textOf(entries,'model-inputs.sha256');
+    must(hash(Buffer.from(sourceManifest,'utf8'))===pin.modelInputManifestSha256,
+      'TLC input manifest digest differs from trusted reviewer pin');
+    parseHashManifest(sourceManifest,MODEL_INPUTS,'TLC source');
+    must(textOf(entries,'java-version.txt').includes('version'),
+      'Java runtime identity missing');
+  } else {
+    const src=textOf(entries,'fixture-sha256.txt');
+    must(src.split('\n').some(l=>l.startsWith(pin.fixtureSha256+
+      '  examples/critical-actor-checked-v1.atto')),
+      'canonical fixture file hash not corroborated');
+    const cls=textOf(entries,'compiler-class-sha256.txt');
+    must(cls.split('\n').some(l=>l.startsWith(pin.compilerSha256+
+      '  target/classes/dev/oreslang/compiler/OresCompiler.class')),
+      'compiled compiler-class hash not corroborated');
+    const checkout=jsonOf(entries,'checkout.json');
+    must(checkout.source_head===pin.head && checkout.source_tree===pin.tree &&
+      checkout.proof==='NOT_INDEPENDENTLY_VERIFIED' &&
+      String(checkout.run_id)===String(pin.runId) &&
+      String(checkout.attempt)===String(pin.attempt) &&
+      checkout.job===pin.jobKey, 'Java checkout evidence mismatch');
+    const xml=textOf(entries,'TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml');
+    verifyGuestXmlWithJava(xml);
+  }
+  return receipt;
+}
+export async function verifyArtifactCandidate(api,pin,zipBytes) {
+  validatePin(pin);
+  const [listing,run]=await Promise.all([
+    api.get('/repos/'+pin.repo+'/actions/runs/'+pin.runId+'/artifacts?per_page=100'),
+    api.get('/repos/'+pin.repo+'/actions/runs/'+pin.runId)
+  ]);
+  const record=validateArtifactMetadata(pin,null,listing,run);
+  must(Buffer.isBuffer(zipBytes) && zipBytes.length===record.size_in_bytes,
+    'downloaded ZIP size mismatch');
+  const zipDigest=hash(zipBytes);
+  must('sha256:'+zipDigest===record.digest,'downloaded ZIP SHA256 mismatch');
+  const entries=inspectZip(zipBytes);
+  const receipt=receiptFromArtifact(pin,entries);
+  const check=await verifyLiveCandidate(api,pin,receipt);
+  return Object.freeze({
+    ...check,classification:'GITHUB_ARTIFACT_BYTES_CORROBORATED_CANDIDATE_ONLY',
+    artifactId:record.id,artifactName:record.name,artifactDigest:record.digest,
+    archiveMemberCount:entries.size,
+    artifactIntegrity:'GITHUB_API_SHA256_MATCHED',
+    artifactOrigin:'GITHUB_RUN_AND_REPO_METADATA_MATCHED',
+    receiptAuthenticity:'GITHUB_ARCHIVE_DIGEST_CORROBORATED_NOT_SIGNED',
+    guestExecution:'NOT_INDEPENDENTLY_VERIFIED',
+    proof:'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED'
+  });
+}
+async function main(){
+  if(process.argv.length!==4)throw Error(
+    'Usage: ASSURANCE_READ_TOKEN=... node tools/verify-assurance-artifact.mjs <trusted-pin.json> <original-artifact.zip>');
+  const token=process.env.ASSURANCE_READ_TOKEN;
+  if(!token)throw Error('ASSURANCE_READ_TOKEN required');
+  const [pin,archive]=await Promise.all([
+    readFile(resolve(process.argv[2]),'utf8').then(JSON.parse),
+    readFile(resolve(process.argv[3]))
+  ]);
+  console.log(JSON.stringify(await verifyArtifactCandidate(
+    new GitHubReadOnly(token),pin,archive),null,2));
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
+  main().catch(e=>{console.error(String(e.message||e));process.exitCode=1;});
+,'m');
+  const match=regex.exec(text);
+  const counts=match ? match.slice(1).map(x=>Number(x.replaceAll(',',''))) : [];
   must(text.includes('TLC2 Version') &&
     text.split(success).length===2 &&
     counts.length===3 && counts.every(Number.isSafeInteger) &&
