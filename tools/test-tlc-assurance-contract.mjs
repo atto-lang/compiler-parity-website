@@ -37,6 +37,25 @@ assert.match(fs.readFileSync('formal/specs/ActorBorrowGeneration.read-transfer-m
 assert.match(script,/verification":"UNATTESTED_TOOL_RUN"/);
 assert.match(script,/guest":"NOT_EXECUTED"/);
 
+function parseStaticReceiptFormat(field) {
+  const line = script.split('\n').find(value=>
+    value.startsWith("printf '{") && value.includes('"' + field + '":'));
+  assert.ok(line,field+' receipt formatter must exist');
+  const format = line.split("'")[1];
+  assert.ok(format?.endsWith("\\n"),'receipt must end with escaped newline');
+  const expanded = format.replace(/%s/g,'0').replace(/\\n$/,'');
+  const report = JSON.parse(expanded);
+  assert.ok(report.head || report.source_head,'receipt must bind a source head');
+  assert.ok(report.tree || report.source_tree,'receipt must bind a source tree');
+  assert.equal(report.guest,'NOT_EXECUTED','source-only gate must not claim guests');
+  assert.ok(report.run_id && report.run_attempt && report.job,
+    'receipt must bind a run, attempt and job');
+  return report;
+}
+assert.equal(parseStaticReceiptFormat('scope').scope,'TLC_BOUNDED_MODEL_ONLY');
+assert.equal(parseStaticReceiptFormat('classification').classification,'TLC_BOUNDED_MODEL_ONLY');
+
+
 const syntax=spawnSync('bash',['-n','tools/run-tlc-assurance.sh'],{encoding:'utf8'});
 assert.equal(syntax.status,0,syntax.stderr||'TLC shell syntax invalid');
 const head=spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'});
