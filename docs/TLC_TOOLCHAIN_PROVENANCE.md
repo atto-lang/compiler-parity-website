@@ -38,6 +38,17 @@ and requires a clean tracked tree. It uses exact run ID, attempt and job identit
 verifies the expected SHA-256 and official release SHA-1; checks that the JAR
 contains TLC and SANY classes; and limits each parser/model-checker execution.
 
+The runner enforces the official v1.7.4 SHA-256 **and** SHA-1 constants
+inside the shell script, not only in workflow environment variables; callers
+cannot substitute their own `EXPECTED_JAR_SHA256`/`EXPECTED_JAR_SHA1` values.
+It resolves the verified JAR to an absolute canonical path **before** changing
+to `formal/specs` so a relative JAR path cannot point somewhere else at
+execution time. Before running TLC, it verifies that every `.tla` and `.cfg`
+under the checked directory is a tracked, non-symlink Git file. That protects
+the exact-tree claim from injected untracked model inputs or external linked
+source files. These are source-side checks until a runner actually executes
+them. The negative harness now includes 16 admission-rejection cases.
+
 The runner clears `completed-source-only.json` **before** validation starts.
 It writes the completion record only after five baseline models and three
 negative mutation models have finished. All three negative controls must exit
