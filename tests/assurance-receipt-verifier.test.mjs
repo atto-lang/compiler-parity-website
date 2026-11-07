@@ -7,6 +7,7 @@ import {
 
 const H='b'.repeat(40),T='c'.repeat(40),DIGEST='d'.repeat(64);
 const STEP_CHECKOUT='Checkout exact original head (never synthetic PR merge)';
+const STEP_TLC_BLOB='Independently verify TLC model and runner script HEAD blobs';
 const STEP_TLC='Execute real TLC for five bounded models and three unsafe-mutant controls';
 const JAVA_CHECKOUT='Checkout immutable original Java PR head';
 const JAVA_TEST='Compile critical AST, Task authority and .ores Truffle guest tests';
@@ -16,7 +17,7 @@ const pin=()=>({
   runId:45,attempt:2,jobId:101,
   workflowId:777,workflowPath:'.github/workflows/assurance-tlc.yml',
   jobName:'exact-head-tlc-safety-and-counterexamples',jobKey:'tlc-bounded-design',
-  requiredSteps:[STEP_CHECKOUT,STEP_TLC],
+  requiredSteps:[STEP_CHECKOUT,STEP_TLC_BLOB,STEP_TLC],
   kind:'TLC_BOUNDED_MODEL_ONLY',toolSha256:'936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
 });
 const receipt=()=>({
@@ -27,7 +28,7 @@ const receipt=()=>({
   run_id:'45',run_attempt:'2',job:'tlc-bounded-design'
 });
 const step=name=>({
-  name,number:(name===STEP_CHECKOUT||name===JAVA_CHECKOUT)?1:2,
+  name,number:(name===STEP_CHECKOUT||name===JAVA_CHECKOUT)?1:(name===STEP_TLC?3:2),
   status:'completed',conclusion:'success',
   started_at:time,completed_at:'2026-11-06T10:00:01Z'
 });
@@ -53,7 +54,7 @@ function fixture(){
         check_run_url:'https://api.github.com'+apiBase+'/check-runs/101',
         runner_id:8,runner_name:'GitHub Actions 1',
         status:'completed',conclusion:'success',
-        steps:[step(STEP_CHECKOUT),step(STEP_TLC)]
+        steps:[step(STEP_CHECKOUT),step(STEP_TLC_BLOB),step(STEP_TLC)]
       }]
     }
   };
@@ -94,16 +95,16 @@ async function denied(modify, match=/EVIDENCE_REJECTED/){
   modify(f);
   await assert.rejects(()=>verifyLiveCandidate(f.api,f.pin,f.receipt),match);
 }
-test('matching source, tree, attempt, job and two real steps yield only candidate metadata',async()=>{
+test('matching source, tree, attempt, job and three real steps yield only candidate metadata',async()=>{
   const f=fixture();
   const out=await verifyLiveCandidate(f.api,f.pin,f.receipt);
   assert.equal(out.classification,CANDIDATE_CLASS);
   assert.equal(out.receiptAuthenticity,'NOT_INDEPENDENTLY_ESTABLISHED');
   assert.equal(out.guestExecution,'NOT_INDEPENDENTLY_VERIFIED');
   assert.equal(out.proof,'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED');
-  assert.equal(out.startedSteps,2);
+  assert.equal(out.startedSteps,3);
   assert.equal(out.runnerId,8);
-  assert.deepEqual(out.requiredStepsVerified,[STEP_CHECKOUT,STEP_TLC]);
+  assert.deepEqual(out.requiredStepsVerified,[STEP_CHECKOUT,STEP_TLC_BLOB,STEP_TLC]);
   assert.equal(f.api.calls.length,4);
 });
 test('equivalent scoped Java candidate is never promoted to independent guest proof',async()=>{
@@ -175,7 +176,7 @@ test('job pagination truncation and duplicate job identities fail closed',async(
     const obj=f.payloads[f.base+'/actions/runs/45/attempts/2/jobs?per_page=100'];
     obj.jobs=[...Array(100)].map((_,i)=>({
       id:i+1,name:'job'+i,status:'completed',conclusion:'success',
-      runner_id:8,steps:[step(STEP_CHECKOUT),step(STEP_TLC)]
+      runner_id:8,steps:[step(STEP_CHECKOUT),step(STEP_TLC_BLOB),step(STEP_TLC)]
     }));obj.total_count=100;
   });
 });
@@ -273,5 +274,19 @@ test('step order and failure regardless of continue-on-error cannot count',async
   await denied(f=>{
     const steps=f.payloads[f.base+path].jobs[0].steps;
     steps.push({...step('Adversarial continue-on-error failure'),number:3,conclusion:'failure'});
+  });
+});
+
+test('TLC original model/script HEAD step cannot be omitted, skipped or moved after execution',async()=>{
+  const path='/actions/runs/45/attempts/2/jobs?per_page=100';
+  await denied(f=>{f.pin.requiredSteps=[STEP_CHECKOUT,STEP_TLC]});
+  await denied(f=>{
+    f.payloads[f.base+path].jobs[0].steps.splice(1,1);
+  });
+  await denied(f=>{
+    f.payloads[f.base+path].jobs[0].steps[1].conclusion='skipped';
+  });
+  await denied(f=>{
+    f.payloads[f.base+path].jobs[0].steps[1].number=4;
   });
 });
