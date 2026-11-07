@@ -38,9 +38,9 @@ printf '{"scope":"TLC_BOUNDED_MODEL_ONLY","guest":"NOT_EXECUTED","head":"%s","tr
 pushd formal/specs >/dev/null
 for model in ActorIsolation CancellationAwait HotReloadFencing ReliablePubSub ActorBorrowGeneration; do
   echo "TLC baseline safety: $model"
-  timeout 90s java -cp "$TLA2TOOLS_JAR" tla2sany.SANY "$model.tla" \
+  timeout 30s java -cp "$TLA2TOOLS_JAR" tla2sany.SANY "$model.tla" \
     > "../../private-artifacts/tlc/$model.parse.log" 2>&1
-  timeout 120s java -cp "$TLA2TOOLS_JAR" tlc2.TLC -deadlock -workers 1 \
+  timeout 90s java -cp "$TLA2TOOLS_JAR" tlc2.TLC -deadlock -workers 1 \
     -config "$model.cfg" "$model.tla" \
     > "../../private-artifacts/tlc/$model.baseline.log" 2>&1
 done
@@ -52,7 +52,7 @@ for mutation in overlap stale; do
   esac
   output="../../private-artifacts/tlc/ActorBorrowGeneration.$mutation.counterexample.log"
   status=0
-  timeout 120s java -cp "$TLA2TOOLS_JAR" tlc2.TLC -deadlock -workers 1 \
+  timeout 90s java -cp "$TLA2TOOLS_JAR" tlc2.TLC -deadlock -workers 1 \
     -config "$config" ActorBorrowGeneration.tla > "$output" 2>&1 || status=$?
   if [[ "$status" -eq 0 || "$status" -eq 124 || "$status" -eq 137 ]]; then
     echo "Mutant passed, hung, or was terminated: $mutation ($status)" >&2
