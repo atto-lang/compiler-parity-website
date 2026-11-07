@@ -149,6 +149,19 @@ export function inspectZip(bytes) {
     cursor=next;
   }
   must(cursor===eocd, 'unexpected central-directory bytes');
+  // The archive byte digest is over the entire ZIP, not just selected files:
+  // reject self-contained hidden preambles/gaps between local file records.
+  // Every byte preceding the central directory must belong to exactly one
+  // canonical local-file record including any streaming data descriptor.
+  usedRanges.sort((left,right)=>left[0]-right[0]);
+  let coveredUntil=0;
+  for(const [start,end] of usedRanges) {
+    must(start===coveredUntil && end>start,
+      'ZIP has unreferenced, overlapping or prefixed local bytes');
+    coveredUntil=end;
+  }
+  must(coveredUntil===centralAt,
+    'ZIP contains unreferenced bytes before the central directory');
   return result;
 }
 export function expectedArtifactName(pin) {
