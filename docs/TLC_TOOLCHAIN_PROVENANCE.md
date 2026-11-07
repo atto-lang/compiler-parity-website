@@ -43,16 +43,21 @@ inside the shell script, not only in workflow environment variables; callers
 cannot substitute their own `EXPECTED_JAR_SHA256`/`EXPECTED_JAR_SHA1` values.
 It resolves the verified JAR to an absolute canonical path **before** changing
 to `formal/specs` so a relative JAR path cannot point somewhere else at
-execution time. Before running TLC, it verifies that every `.tla` and `.cfg`
-under the checked directory is a tracked, non-symlink Git file. That protects
+execution time. Before running TLC, it verifies every `.tla`/`.cfg` and
+`tools/run-tlc-assurance.sh` itself is a tracked, non-symlink Git file.
+An independent **workflow preflight step** repeats this original-HEAD check
+before invoking the runner script, so it cannot self-attest a tampered copy.
+That protects
 the exact-tree claim from injected untracked model inputs or external linked
 source files. Furthermore, every such input's on-disk Git blob hash
 must equal `HEAD:<path>` directly. This catches an `assume-unchanged` or
 `skip-worktree` mutation that a conventional `git status` may omit.
 These are source-side checks until a runner actually executes them. The
-negative harness now includes **17** admission-rejection cases, including
+negative harness now includes **18** admission-rejection cases, including
 one test that creates an isolated scratch Git repository and deliberately
 mutates an `assume-unchanged` tracked model while Git status stays clean.
+A second scratch mutation tests a hidden local edit to the runner shell
+script. Both are source-only controls pending actual Node/Bash execution.
 
 The runner clears `completed-source-only.json` **before** validation starts.
 It writes the completion record only after five baseline models and three
