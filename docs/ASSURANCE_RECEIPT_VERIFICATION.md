@@ -135,6 +135,21 @@ It computes SHA-256 of the actual downloaded ZIP bytes and compares it to
 the API digest. There is **no automatic redirect following or token forwarding
 to an artifact CDN** inside this verifier.
 
+The archive parser now checks central-directory and local-header CRC/size
+consistency, bounds the complete local-record span (not just compressed
+data), and validates streaming ZIP data descriptors where present. It
+rejects unrecognized ZIP flag combinations, ZIP64 extra fields even when
+the ordinary size fields look safe, and truncated/overlapping record
+metadata. This avoids treating contradictory archive structures as
+trusted ZIP evidence.
+
+TLC's final state counts may be either ordinary decimal or correctly
+comma-grouped thousands (for example `17,118 states generated`). The
+model-log validator accepts both representations, while rejecting malformed
+comma placement, impossible state totals and values beyond safe integer
+precision. This is a compatibility and evidence-integrity check, not a
+claim of TLC runtime execution.
+
 The ZIP reader does not extract paths to disk. It verifies central/local
 headers, CRC32, regular files only, unique safe names, supported compression,
 and strict compressed/uncompressed size limits. It rejects ZIP traversal,
