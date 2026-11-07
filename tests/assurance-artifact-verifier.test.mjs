@@ -12,6 +12,32 @@ const H='b'.repeat(40),T='c'.repeat(40),D='d'.repeat(64);
 const TLC='936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88';
 const TLC_KIND='TLC_BOUNDED_MODEL_ONLY', JAVA_KIND='JAVA_JVM_GUEST_CANDIDATE';
 const sha=x=>createHash('sha256').update(x).digest('hex');
+const MODELS=['ActorIsolation','CancellationAwait','HotReloadFencing',
+  'ReliablePubSub','ActorBorrowGeneration'];
+const MUTANTS=['overlap','stale','read-transfer'];
+const INPUTS=[
+  ...MODELS.map(x=>'formal/specs/'+x+'.tla'),
+  ...MODELS.map(x=>'formal/specs/'+x+'.cfg'),
+  ...MUTANTS.map(x=>'formal/specs/ActorBorrowGeneration.'+x+'-mutant.cfg'),
+  'tools/run-tlc-assurance.sh'
+];
+const SOURCE_MANIFEST=INPUTS.map(x=>D+'  '+x).join('\n')+'\n';
+const JAVA_GUEST_NAMES=[
+  'actorCriticalGuestReturnsExpectedValueAndReleasesBeforeStop',
+  'earlyReturnInsideCriticalReleasesGuardBeforeActorStop',
+  'canonicalAttoActorCriticalGuestMatchesLegacyGuestOutput',
+  'canonicalAttoEarlyReturnGuestReleasesBeforeStop',
+  'canonicalAttoGuestOutputTracksARealSourceMutation',
+  'canonicalAttoGuestCriticalBodyMutationChangesOutput',
+  'canonicalAttoGuestSourceMutationWorksInBothDirections',
+  'unverifiedFreeFunctionCriticalSourceDoesNotExecute'
+];
+const guestXml=()=>{
+  const suite='dev.oreslang.CriticalActorGuestExecutionTest';
+  return '<testsuite name="'+suite+'" tests="8" failures="0" errors="0" skipped="0">'+
+    JAVA_GUEST_NAMES.map(name=>'<testcase classname="'+suite+
+      '" name="'+name+'"/>').join('')+'</testsuite>';
+};
 function crc32(b) {
   let c=0xffffffff;
   for(const x of b){c^=x;for(let i=0;i<8;i++)c=(c>>>1)^(0xedb88320&-(c&1));}
@@ -53,6 +79,7 @@ function pin(kind=TLC_KIND) {
       'critical-guest-verification',
     jobKey:kind===TLC_KIND?'tlc-bounded-design':'critical-guest-verification',
     toolSha256:TLC,compilerSha256:D,fixtureSha256:D,
+    modelInputManifestSha256:sha(Buffer.from(SOURCE_MANIFEST)),
     requiredSteps:kind===TLC_KIND?
       ['Checkout exact original head (never synthetic PR merge)',
        'Execute real TLC for five bounded models and three unsafe-mutant controls']:
@@ -68,14 +95,15 @@ function tlcFiles(p=pin()) {
   const prov={scope:TLC_KIND,guest:'NOT_EXECUTED',head:p.head,tree:p.tree,
     jar_sha256:p.toolSha256,run_id:String(p.runId),
     run_attempt:String(p.attempt),job:p.jobKey};
-  const models=['ActorIsolation','CancellationAwait','HotReloadFencing',
-    'ReliablePubSub','ActorBorrowGeneration'];
-  const logs=[...models.flatMap(x=>[
-      [x+'.parse.log','Parsing successful'],
-      [x+'.baseline.log','Model checking completed. No error has been found.']
-    ]),...['overlap','stale','read-transfer'].map(x=>[
+  const logs=[...MODELS.flatMap(x=>[
+      [x+'.parse.log','Parsing file '+x+'.tla\nSemantic processing of module '+x+'\n'],
+      [x+'.baseline.log','TLC2 Version 2.17\nModel checking completed. No error has been found.\n'+
+        '5 states generated, 5 distinct states found, 0 states left on queue.\n'+
+        'Finished in 00s at (2026-11-07 14:00:00)\n']
+    ]),...MUTANTS.map(x=>[
       'ActorBorrowGeneration.'+x+'.counterexample.log',
-      'Error: Invariant Inv is violated.\nError: The behavior up to this point is:\nState 1: <ok>'
+      'TLC2 Version 2.17\nError: Invariant Inv is violated.\n'+
+      'Error: The behavior up to this point is:\nState 1: <Initial predicate>\n'
     ])];
   const manifest=logs.map(([n,txt])=>sha(Buffer.from(txt))+
     '  private-artifacts/tlc/'+n).join('\n')+'\n';
@@ -83,7 +111,7 @@ function tlcFiles(p=pin()) {
     ['completed-source-only.json',JSON.stringify(receipt)],
     ['provenance.json',JSON.stringify(prov)],
     ['logs.sha256',manifest],
-    ['model-inputs.sha256','a'.repeat(64)+'  formal/specs/ActorIsolation.tla\n'],
+    ['model-inputs.sha256',SOURCE_MANIFEST],
     ['java-version.txt','openjdk version "21"\n'],
     ...logs
   ];
@@ -102,8 +130,7 @@ function javaFiles(p=pin(JAVA_KIND)){
       '  examples/critical-actor-checked-v1.atto\n'],
     ['compiler-class-sha256.txt',p.compilerSha256+
       '  target/classes/dev/oreslang/compiler/OresCompiler.class\n'],
-    ['TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml',
-      '<testsuite name="dev.oreslang.CriticalActorGuestExecutionTest" tests="8"/>']
+    ['TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml',guestXml()]
   ];
 }
 function fixture(p,bytes){
@@ -253,4 +280,70 @@ test('complete simulated API readback stays candidate-only even when artifact an
   assert.equal(result.guestExecution,'NOT_INDEPENDENTLY_VERIFIED');
   assert.equal(result.proof,'NOT_SIGNED_OR_INDEPENDENTLY_REVIEWED');
   assert.equal(result.runnerId,9001);
+});
+
+test('TLC baseline logs require version, completed full search, nonzero distinct states, empty queue and finish',()=>{
+  const p=pin();
+  for(const change of [
+    'TLC2 Version 2.17\n',
+    'Model checking completed. No error has been found.',
+    '5 states generated, 5 distinct states found, 0 states left on queue.',
+    'Finished in 00s at (2026-11-07 14:00:00)'
+  ]){
+    const list=tlcFiles(p), row=list.find(x=>x[0]==='ActorIsolation.baseline.log');
+    row[1]=row[1].replace(change,'');
+    const manifest=list.find(x=>x[0]==='logs.sha256');
+    manifest[1]=list.filter(x=>x[0].endsWith('.log'))
+      .map(([n,txt])=>sha(Buffer.from(txt))+'  private-artifacts/tlc/'+n).join('\n')+'\n';
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
+  }
+});
+test('TLC counterexample must be specific invariant failure plus initial state and no false success',()=>{
+  const p=pin();
+  for(const changed of [
+    'Error: something else is wrong.',
+    'Model checking completed. No error has been found.',
+    'Error: Invariant Inv is violated.\nError: The behavior up to this point is:\n',
+    'Error: Invariant Inv is violated.\nError: The behavior up to this point is:\nState 1: <ok>\nModel checking completed. No error has been found.'
+  ]){
+    const list=tlcFiles(p),row=list.find(x=>x[0]==='ActorBorrowGeneration.overlap.counterexample.log');
+    row[1]='TLC2 Version 2.17\n'+changed;
+    list.find(x=>x[0]==='logs.sha256')[1]=
+      list.filter(x=>x[0].endsWith('.log'))
+        .map(([n,txt])=>sha(Buffer.from(txt))+'  private-artifacts/tlc/'+n).join('\n')+'\n';
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
+  }
+});
+test('model-input manifest is independently pinned and exact, not self-authenticating',()=>{
+  const p=pin();
+  const changed=tlcFiles(p);
+  changed.find(x=>x[0]==='model-inputs.sha256')[1]=
+    SOURCE_MANIFEST.replace(D,D.replace(/^./,'e'));
+  assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(changed))),/ARTIFACT_REJECTED/);
+  const missing=pin();
+  delete missing.modelInputManifestSha256;
+  assert.throws(()=>receiptFromArtifact(missing,inspectZip(zip(tlcFiles(missing)))),
+    /ARTIFACT_REJECTED/);
+  const truncated=tlcFiles(p);
+  truncated.find(x=>x[0]==='model-inputs.sha256')[1]=SOURCE_MANIFEST.split('\n')[0]+'\n';
+  assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(truncated))),/ARTIFACT_REJECTED/);
+});
+test('Java guest XML needs eight exact direct passing cases, not a forged test counter',()=>{
+  const p=pin(JAVA_KIND),xmlName='TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml';
+  for(const forged of [
+    '<testsuite name="dev.oreslang.CriticalActorGuestExecutionTest" tests="8" failures="0" errors="0" skipped="0"/>',
+    guestXml().replace('tests="8"','tests="9"'),
+    guestXml().replace('failures="0"','failures="1"'),
+    guestXml().replace('skipped="0"','skipped="1"'),
+    guestXml().replace(JAVA_GUEST_NAMES[0],JAVA_GUEST_NAMES[1]),
+    guestXml().replace('classname="dev.oreslang.CriticalActorGuestExecutionTest"',
+      'classname="attacker.Forged"'),
+    '<!DOCTYPE testsuite [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'+guestXml(),
+    guestXml().replace('</testsuite>',
+      '<testcase classname="dev.oreslang.CriticalActorGuestExecutionTest" name="extra"/></testsuite>')
+  ]){
+    const list=javaFiles(p);
+    list.find(x=>x[0]===xmlName)[1]=forged;
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
+  }
 });
