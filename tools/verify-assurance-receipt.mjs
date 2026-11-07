@@ -14,6 +14,8 @@ import {
 } from './collect-assurance.mjs';
 
 export const CANDIDATE_CLASS = 'GITHUB_METADATA_CORROBORATED_CANDIDATE_ONLY';
+const TLC_SHA256='936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88';
+const hex64 = x => typeof x==='string' && /^[a-f0-9]{64}$/.test(x);
 const integer = n => Number.isSafeInteger(n) && n > 0;
 function requireEvidence(ok, reason) {
   if (!ok) throw new Error('EVIDENCE_REJECTED: '+reason);
@@ -35,6 +37,10 @@ export function validatePin(pin) {
     integer(pin.jobId) && validName(pin.jobName) && validName(pin.jobKey), 'invalid pinned run/job identity');
   requireEvidence(['TLC_BOUNDED_MODEL_ONLY','JAVA_JVM_GUEST_CANDIDATE'].includes(pin.kind),
     'unsupported evidence kind');
+  requireEvidence(pin.kind==='TLC_BOUNDED_MODEL_ONLY'
+    ? pin.toolSha256===TLC_SHA256
+    : hex64(pin.compilerSha256) && hex64(pin.fixtureSha256),
+    'tool or fixture identity not pinned');
   requireEvidence(Array.isArray(pin.requiredSteps) && pin.requiredSteps.length >= 1 &&
     pin.requiredSteps.length <= 20 &&
     pin.requiredSteps.every(s => typeof s === 'string' && s.length > 0 && s.length <= 150) &&
@@ -59,13 +65,15 @@ export function validateCandidateReceipt(pin, receipt) {
       receipt.guest==='NOT_EXECUTED' &&
       receipt.baseline_models===5 &&
       receipt.expected_invariant_counterexamples===3 &&
-      /^[a-f0-9]{64}$/.test(receipt.tool_sha256) &&
+      receipt.tool_sha256===pin.toolSha256 &&
       receipt.job===pin.jobKey,
       'TLC scoped receipt fields missing or elevated');
   } else {
     requireEvidence(receipt.classification==='SCOPED_SUREFIRE_CASES_OBSERVED' &&
       receipt.proof==='NOT_INDEPENDENTLY_VERIFIED' &&
-      receipt.guest==='CANDIDATE_ONLY' && receipt.job===pin.jobKey,
+      receipt.guest==='CANDIDATE_ONLY' && receipt.job===pin.jobKey &&
+      receipt.compiler_class_sha256===pin.compilerSha256 &&
+      receipt.fixture_sha256===pin.fixtureSha256,
       'Java scoped receipt fields missing or elevated');
   }
 }
