@@ -65,6 +65,18 @@ No category by itself proves unbounded liveness, production refinement or
 cross-backend parity. Reviews, protected source branches and signed/independent
 receipt verification are separate merge gates.
 
+## Independent readback before any proof promotion
+
+After the canary and the real compiler/TLC workflow have started steps, use
+`tools/verify-assurance-receipt.mjs` with a reviewer-pinned JSON identity
+and the scoped pass-only receipt. See
+[`ASSURANCE_RECEIPT_VERIFICATION.md`](./ASSURANCE_RECEIPT_VERIFICATION.md).
+Run the live readback in a trusted reviewer environment; PR-source workflows
+only execute mocked negative tests and must not receive a privileged token.
+Metadata-corroborated evidence remains **candidate-only** until authenticated
+artifact bytes, guest/TLC logs, checksums and independent approvals are
+reviewed.
+
 ## Minimal operator receipt
 
 Record `repo`, PR, original 40-hex `head`, job's actual checked-out tree
