@@ -43,7 +43,14 @@ test('deepening or cutting exploration never promotes a bounded model to guest p
 
 test('bounded explorer rejects invalid/inconclusive resource bounds',()=>{
   assert.throws(()=>explore(null),/Invalid model/);
-  assert.throws(()=>explore(models.pubsub,{maxStates:1}),/State bound exceeded/);
+  assert.throws(()=>explore(models.pubsub,{maxStates:1}),/Invalid maxStates/);
+  assert.throws(()=>explore(models.pubsub,{maxStates:0}),/Invalid maxStates/);
+  assert.throws(()=>explore(models.pubsub,{maxDepth:0}),/Invalid maxDepth/);
+  assert.throws(()=>explore(models.pubsub,{maxDepth:Infinity}),/Invalid maxDepth/);
+  assert.throws(()=>explore(models.pubsub,{maxDepth:1.5}),/Invalid maxDepth/);
+  assert.throws(()=>explore(models.pubsub,{maxStates:NaN}),/Invalid maxStates/);
+  assert.throws(()=>verifyAll({maxDepth:1}),/Baseline depth truncated; inconclusive/);
+  assert.throws(()=>explore(models.pubsub,{maxStates:2}),/State bound exceeded/);
 });
 
 test('two active readers coexist, but writers cannot overlap or survive rt take generation',()=>{
