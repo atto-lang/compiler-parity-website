@@ -38,6 +38,8 @@ assert.match(script,/git ls-files --error-unmatch -- "\$model_input"/,
 assert.match(script,/MODEL_INPUT_BLOB_MISMATCH/);
 assert.match(script,/git hash-object -- "\$model_input"/);
 assert.match(script,/git rev-parse --verify "HEAD:\$model_input"/);
+assert.match(script,/for model_input in formal\/specs\/\*\.tla formal\/specs\/\*\.cfg tools\/run-tlc-assurance\.sh; do/,
+  'the executed TLC shell script must be pinned to the immutable Git HEAD blob');
 assert.match(script,/TLA2TOOLS_JAR="\$\(realpath -e -- "\$TLA2TOOLS_JAR"\)"/,
   'normalize JAR to absolute path before TLC changes directory');
 assert.ok(script.indexOf('realpath -e --') < script.indexOf('pushd formal/specs'),
@@ -154,6 +156,25 @@ try {
   assert.equal(fs.existsSync(path.join(scratch,receipt)),false,
     'no completion receipt may survive a hidden model mutation');
   controls++;
+  git(['update-index','--no-assume-unchanged','--','formal/specs/Synthetic.tla']);
+  git(['checkout','--','formal/specs/Synthetic.tla']);
+  const scratchScript=path.join(scratch,'tools','run-tlc-assurance.sh');
+  git(['update-index','--assume-unchanged','--','tools/run-tlc-assurance.sh']);
+  fs.appendFileSync(scratchScript,'\n# local runner mutation not in HEAD\n');
+  assert.equal(git(['status','--porcelain','--untracked-files=no']),'',
+    'runner-script negative fixture must evade ordinary tracked git status');
+  const hiddenRunnerScript=spawnSync('bash',['tools/run-tlc-assurance.sh'],{
+    cwd:scratch,encoding:'utf8',timeout:10000,
+    env:{...env,EXPECTED_HEAD:scratchHead}
+  });
+  assert.notEqual(hiddenRunnerScript.status,0,
+    'an altered TLC runner script cannot count as exact-head execution');
+  assert.match(hiddenRunnerScript.stdout+hiddenRunnerScript.stderr,
+    /MODEL_INPUT_BLOB_MISMATCH.*tools\/run-tlc-assurance\.sh/,
+    'runner script must be checked directly against its original HEAD blob');
+  assert.equal(fs.existsSync(path.join(scratch,receipt)),false,
+    'a mutated runner may not leave a success completion receipt');
+  controls++;
   reject('missing jar',{TLA2TOOLS_JAR:path.join(tmp,'missing.jar')},/TLC_JAR_MISSING/);
   reject('missing source head',{EXPECTED_HEAD:''},/source HEAD is required/);
   reject('invalid source head',{EXPECTED_HEAD:'not-a-full-sha'},/Invalid source SHA/);
@@ -172,7 +193,7 @@ try {
   reject('caller re-pinning SHA-1',
     {EXPECTED_JAR_SHA1:'a'.repeat(40)},/UNAUTHORIZED_TLC_SHA1_REPIN/);
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
-assert.equal(controls,17,'all 17 negative admission controls must execute');
+assert.equal(controls,18,'all 18 negative admission controls must execute');
 console.log('PASS '+controls+' source-only negative controls: stale receipt, '+
   'wrong jar/hash, missing/mismatched head, run/attempt, injection and invalid job');
 console.log('SOURCE_ONLY: No TLC parser/model checker or AttoLang guest executed');
