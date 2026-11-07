@@ -102,7 +102,7 @@ head** rather than the default synthetic pull-request merge ref. Once a runner
 actually executes, it compares the Git head to the expected SHA, records the
 full tree and run/attempt/job identity, and runs the original dashboard smoke,
 assurance view tests, mocked collector tests, and bounded state models with
-nine behavior-changing mutation controls. It uploads a private
+ten behavior-changing mutation controls. It uploads a private
 **SOURCE_ONLY_SITE_TEST** receipt. Neither artifact nor workflow success
 certifies AttoLang guest execution or independent receipt authentication.
 
@@ -148,7 +148,7 @@ An imported run-head match is never interpreted as proof of what source the runn
 actually checked out.
 
 The canonical bounded checker now includes a fifth actor borrow/generation model
-(two concurrent readers, exclusive writer, rt take ownership generation), with nine
+(two concurrent readers, exclusive writer, rt take ownership generation), with ten
 negative mutants across the five models. A new TLA+ specification and expected
 unsafe-counterexample configs live under formal/specs/. The dedicated
 assurance-tlc.yml workflow is source-only and uses a pinned tool digest. Both
@@ -157,3 +157,7 @@ model and collector output are private metadata; guest proof remains UNVERIFIED.
 See formal/refinement/ACT-BORROW-V1.md for the planned Java-to-five-backend
 refinement acceptance contract. Host/model evidence is not a substitute for a
 real compiled .atto guest run, even when a workflow reports success.
+
+### Reader-generation formal assurance hardening
+
+The fifth design model tracks the epoch of active shared borrows; unsafe `rt take` while a read lease remains must emit a two-action counterexample. The TLA+ contract includes `NoOldReader` and a third deliberately unsafe TLC mutation. All new evidence is source/model-only until an independently verified TLC run and real `.atto` guest execution complete.
