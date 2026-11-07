@@ -157,7 +157,13 @@ Only the exact canonical evidence file set is accepted: five bounded-model
 parser logs, five TLC baseline logs, three mutant counterexample logs and
 their five provenance/manifest files; or eight Java XML suites and their
 five receipt/manifest files. Extra files, directory entries and missing
-evidence files fail closed.
+evidence files fail closed. The archive also forbids ZIP EOCD comments,
+per-entry central-directory comments, and local/central extra fields:
+these are opaque byte containers not covered by the canonical evidence
+filenames and may otherwise conceal unrelated data. For compatibility,
+the artifact producer must emit a plain, canonical ZIP without these
+metadata containers. The GitHub artifact digest still authenticates only
+the bytes returned by the GitHub API; it does not certify what the tests ran.
 
 The ZIP reader does not extract paths to disk. It verifies central/local
 headers, CRC32, regular files only, unique safe names, supported compression,
