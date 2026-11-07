@@ -156,6 +156,10 @@ function id(item){return item.publisher+':'+item.sequence+'@'+item.generation;}
 /** BFS checks all reachable states under the explicit bounded model. */
 export function explore(model, {mutant=null,maxStates=30000,maxDepth=16}={}) {
   if(!model || typeof model.successors!=='function')throw new Error('Invalid model');
+  if(!Number.isSafeInteger(maxStates) || maxStates<2)
+    throw new Error('Invalid maxStates; exploration inconclusive');
+  if(!Number.isSafeInteger(maxDepth) || maxDepth<1)
+    throw new Error('Invalid maxDepth; exploration inconclusive');
   const seen=new Set(),queue=[{state:clone(model.init),trace:[],depth:0}];
   let edges=0,stoppedAtDepth=false;
   for(let i=0;i<queue.length;i++){
@@ -193,6 +197,8 @@ export function verifyAll(options={}){
   for(const [name,model] of Object.entries(models)){
     const normal=explore(model,options);
     if(!normal.ok)throw new Error('Baseline model violation: '+name+' '+normal.violation);
+    if(normal.depthTruncated)
+      throw new Error('Baseline depth truncated; inconclusive: '+name);
     results.push({model:name,scope:'BOUNDED_DESIGN_MODEL_ONLY',assumptions:model.assumptions,states:normal.states,edges:normal.edges,depthTruncated:normal.depthTruncated});
     for(const mutant of mutationSuite[name]){
       const killed=explore(model,{...options,mutant});
