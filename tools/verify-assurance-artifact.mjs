@@ -250,15 +250,29 @@ function checkTlcCounterexample(text,mutation){
     !/(?:^|\n)\s*(?:Exception in thread|\*\*\* Error)/m.test(text),
     'TLC mutation lacks invariant violation plus state trace: '+mutation);
 }
-function verifyGuestXmlWithJava(xml){
+const JAVA_SUITES=Object.freeze([
+  'dev.oreslang.CriticalActorGuestExecutionTest',
+  'dev.oreslang.ActorBorrowCompilerAdmissionTest',
+  'dev.oreslang.CriticalSuspendsV1SyntaxTest',
+  'dev.oreslang.TaskCaptureAdmissionIdentityTest',
+  'dev.oreslang.nodes.CriticalTicketCleanupTest',
+  'dev.oreslang.CriticalBodyEffectsTest',
+  'dev.oreslang.runtime.CriticalGateTest',
+  'dev.oreslang.runtime.ActorCriticalGateIdentityTest'
+]);
+function verifyGuestXmlWithJava(xml,suite){
   const source=fileURLToPath(new URL('./VerifyArtifactGuestSurefire.java',import.meta.url));
-  const result=spawnSync('java',['--source','21',source],{
+  const result=spawnSync('java',['--source','21',source,suite],{
     input:xml,encoding:'utf8',timeout:30000,maxBuffer:131072,
     shell:false,windowsHide:true
   });
-  must(!result.error && result.status===0 &&
-    result.stdout.trim()==='VALID_GUEST_SUREFIRE_XML tests=8',
-    'Java guest Surefire XML structural validation rejected');
+  const marker='VALID_SUREFIRE_XML suite='+suite+' tests=';
+  const output=result.stdout?.trim()||'';
+  const tests=output.startsWith(marker) ? Number(output.slice(marker.length)) : 0;
+  must(!result.error && result.status===0 && Number.isSafeInteger(tests) &&
+    tests>0 && output===marker+tests,
+    'Java Surefire XML structural validation rejected for '+suite);
+  return tests;
 }
 
 export function receiptFromArtifact(pin,entries) {
@@ -319,8 +333,23 @@ export function receiptFromArtifact(pin,entries) {
       String(checkout.run_id)===String(pin.runId) &&
       String(checkout.attempt)===String(pin.attempt) &&
       checkout.job===pin.jobKey, 'Java checkout evidence mismatch');
-    const xml=textOf(entries,'TEST-dev.oreslang.CriticalActorGuestExecutionTest.xml');
-    verifyGuestXmlWithJava(xml);
+    const manifest=textOf(entries,'surefire-xml-sha256.txt');
+    const expected=new Set(JAVA_SUITES.map(s=>'TEST-'+s+'.xml'));
+    const lines=manifest.trimEnd().split('\n');
+    must(lines.length===expected.size,'Java XML manifest missing or duplicated suite');
+    let observedCases=0;
+    for(const line of lines){
+      const match=/^([a-f0-9]{64})  (TEST-[A-Za-z0-9._-]+\.xml)$/.exec(line);
+      must(match && expected.delete(match[2]),
+        'Java XML manifest has unexpected/duplicated suite');
+      const xml=textOf(entries,match[2]);
+      must(hash(Buffer.from(xml,'utf8'))===match[1],
+        'Java XML manifest does not match archived suite bytes');
+      const suite=match[2].slice(5,-4);
+      observedCases+=verifyGuestXmlWithJava(xml,suite);
+    }
+    must(expected.size===0 && observedCases>=36,
+      'missing independently validated Java Surefire testcase execution records');
   }
   return receipt;
 }
