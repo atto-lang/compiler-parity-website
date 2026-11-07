@@ -39,8 +39,8 @@ verifies the expected SHA-256 and official release SHA-1; checks that the JAR
 contains TLC and SANY classes; and limits each parser/model-checker execution.
 
 The runner clears `completed-source-only.json` **before** validation starts.
-It writes the completion record only after five baseline models and two
-negative mutation models have finished. Both negative controls must exit
+It writes the completion record only after five baseline models and three
+negative mutation models have finished. All three negative controls must exit
 nonzero **and** provide TLC's exact invariant violation plus a reachable state
 trace; a parse failure, timeout, tool crash or arbitrary error message cannot
 count as a mutation killed.
@@ -61,3 +61,7 @@ guest-parity claim.
 Independent security review of the toolchain inputs and an authenticated
 stepful exact-head job are required before accepting TLC evidence. The current
 GitHub runner-admission problem remains a separate blocker.
+
+## Active reader generation proof obligation
+
+`ActorBorrowGeneration.tla` now carries `readerEpoch`, constrained by `NoOldReader`. A third negative configuration (`ActorBorrowGeneration.read-transfer-mutant.cfg`) deliberately transfers an actor ownership epoch while a shared-reader lease is live. The TLC runner must reject every case except an actual invariant violation with a concrete state trace. This is not a proof of real actor heap transfer or cancellation.
