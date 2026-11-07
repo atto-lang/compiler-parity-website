@@ -8,6 +8,8 @@ import {
 const H='b'.repeat(40),T='c'.repeat(40),DIGEST='d'.repeat(64);
 const STEP_CHECKOUT='Checkout exact original head (never synthetic PR merge)';
 const STEP_TLC='Execute real TLC for five bounded models and three unsafe-mutant controls';
+const JAVA_CHECKOUT='Checkout immutable original Java PR head';
+const JAVA_TEST='Compile critical AST, Task authority and .ores Truffle guest tests';
 const time='2026-11-06T10:00:00Z';
 const pin=()=>({
   repo:'example-org/private-project',pr:7,head:H,tree:T,
@@ -57,6 +59,24 @@ function fixture(){
   };
   return {api,payloads,base:apiBase,pin:pin(),receipt:receipt()};
 }
+function asJava(f){
+  f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
+  f.pin.jobName='critical-guest-verification';
+  f.pin.jobKey='critical-guest-verification';
+  f.pin.requiredSteps=[JAVA_CHECKOUT,JAVA_TEST];
+  f.pin.compilerSha256=DIGEST;
+  f.pin.fixtureSha256=DIGEST;
+  const j=f.payloads[f.base+'/actions/runs/45/attempts/2/jobs?per_page=100'].jobs[0];
+  j.name='critical-guest-verification';
+  j.steps=[step(JAVA_CHECKOUT),step(JAVA_TEST)];
+  f.receipt={
+    classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
+    proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
+    head:H,tree:T,run_id:'45',attempt:'2',job:'critical-guest-verification',
+    compiler_class_sha256:DIGEST,fixture_sha256:DIGEST
+  };
+  return f;
+}
 async function denied(modify, match=/EVIDENCE_REJECTED/){
   const f=fixture();
   modify(f);
@@ -76,15 +96,7 @@ test('matching source, tree, attempt, job and two real steps yield only candidat
 });
 test('equivalent scoped Java candidate is never promoted to independent guest proof',async()=>{
   const f=fixture();
-  f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
-  f.pin.compilerSha256=DIGEST;
-  f.pin.fixtureSha256=DIGEST;
-  f.receipt={
-    classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
-    proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-    head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
-    compiler_class_sha256:DIGEST,fixture_sha256:DIGEST
-  };
+  asJava(f);
   const out=await verifyLiveCandidate(f.api,f.pin,f.receipt);
   assert.equal(out.kind,'JAVA_JVM_GUEST_CANDIDATE');
   assert.equal(out.guestExecution,'NOT_INDEPENDENTLY_VERIFIED');
@@ -95,6 +107,7 @@ test('invalid pin inputs fail closed before any network request',()=>{
     ['pr',0],['runId',0],['attempt',-1],['jobId',null],
     ['jobName','job name with spaces'],['jobKey','contains spaces'],['kind','GUEST_PROVEN'],
     ['requiredSteps',[]],['requiredSteps',[STEP_TLC,STEP_TLC]],
+    ['requiredSteps',['Set up job']],
     ['requiredSteps',[5]]
   ]){
     const p=pin();p[field]=value;
@@ -183,15 +196,8 @@ test('Java self-labeled guest proof and changed source are not accepted',async()
     ['classification','GUEST_PARITY_PROVED'],['head','a'.repeat(40)],
     ['tree','a'.repeat(40)],['run_id','0'],['attempt','0']
   ])await denied(f=>{
-    f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
-    f.pin.compilerSha256=DIGEST;
-    f.pin.fixtureSha256=DIGEST;
-    f.receipt={
-      classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
-      proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
-      compiler_class_sha256:DIGEST,fixture_sha256:DIGEST,[field]:value
-    };
+    asJava(f);
+    f.receipt[field]=value;
   });
 });
 
@@ -200,13 +206,21 @@ test('toolchain and fixture identities cannot be asserted without pins',async()=
   await denied(f=>{f.receipt.tool_sha256='e'.repeat(64)});
   await denied(f=>{f.pin.kind='JAVA_JVM_GUEST_CANDIDATE'});
   await denied(f=>{
-    f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
-    f.pin.compilerSha256=DIGEST;f.pin.fixtureSha256=DIGEST;
-    f.receipt={
-      classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
-      proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
-      compiler_class_sha256:'e'.repeat(64),fixture_sha256:DIGEST
-    };
+    asJava(f);
+    f.receipt.compiler_class_sha256='e'.repeat(64);
+  });
+});
+
+test('required checkout and real execution step names cannot be relaxed by pin',async()=>{
+  await denied(f=>{f.pin.requiredSteps=['Set up job']});
+  await denied(f=>{f.pin.requiredSteps=[STEP_CHECKOUT]});
+  await denied(f=>{f.pin.requiredSteps=[STEP_TLC]});
+  await denied(f=>{
+    asJava(f);
+    f.pin.requiredSteps=[JAVA_CHECKOUT];
+  });
+  await denied(f=>{
+    asJava(f);
+    f.pin.requiredSteps=[JAVA_TEST];
   });
 });
