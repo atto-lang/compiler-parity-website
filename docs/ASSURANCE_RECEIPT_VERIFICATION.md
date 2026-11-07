@@ -75,14 +75,15 @@ The official TLC SHA-256 enforced by the verifier is
 A zero-step job is **RUNNER_NOT_ADMITTED** and cannot be promoted. Retry only
 after identifying and resolving the admission blocker.
 
-The reviewer cannot weaken `requiredSteps` to a setup-only step. The verifier
-requires **both** the immutable checkout and real execution step names for
-each kind. On Java the checkout has the explicit name
-`Checkout immutable original Java PR head` and the main execution step is
-`Compile critical AST, Task authority and .ores Truffle guest tests`.
-On TLC the required names are
-`Checkout exact original head (never synthetic PR merge)` and
+The reviewer cannot weaken `requiredSteps` to a setup-only step or
+reorder the mandatory steps. Java requires the immutable checkout followed
+by the real Maven/Surefire execution step. TLC requires **three ordered
+steps**: `Checkout exact original head (never synthetic PR merge)`, then
+`Independently verify TLC model and runner script HEAD blobs`, then
 `Execute real TLC for five bounded models and three unsafe-mutant controls`.
+The independent preflight checks every model/config file **and the executed
+runner script** against original Git blobs before invoking any PR script.
+`steps=[]` or `steps=null` never qualifies as proof of admission.
 
 The test suite `tests/assurance-receipt-verifier.test.mjs` uses mocked
 readback responses. PR CI runs the mock suite **without a privileged token**.
@@ -149,6 +150,14 @@ model-log validator accepts both representations, while rejecting malformed
 comma placement, impossible state totals and values beyond safe integer
 precision. This is a compatibility and evidence-integrity check, not a
 claim of TLC runtime execution.
+
+The archive reader rejects unreferenced bytes before or between local
+file records, even when ZIP metadata and CRCs are internally consistent.
+Only the exact canonical evidence file set is accepted: five bounded-model
+parser logs, five TLC baseline logs, three mutant counterexample logs and
+their five provenance/manifest files; or eight Java XML suites and their
+five receipt/manifest files. Extra files, directory entries and missing
+evidence files fail closed.
 
 The ZIP reader does not extract paths to disk. It verifies central/local
 headers, CRC32, regular files only, unique safe names, supported compression,
