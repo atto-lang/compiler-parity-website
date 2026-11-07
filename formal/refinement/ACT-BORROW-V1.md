@@ -12,7 +12,7 @@ TLA+ module \`formal/specs/ActorBorrowGeneration.tla\` and the JS bounded model 
 - Ownership transfer happens only when there are no active borrows or writer rights.
 - A stale owner/writer from generation 0 must not reacquire mutable access in generation 1.
 
-Two unsafe TLA+ configurations must produce reachable invariant counterexamples: \`ActorBorrowGeneration.overlap-mutant.cfg\` and \`ActorBorrowGeneration.stale-mutant.cfg\`. Model-checker receipt checks must distinguish a source-authored TLA+ specification from an actual TLC execution.
+Three unsafe TLA+ configurations must produce reachable invariant counterexamples: \`ActorBorrowGeneration.overlap-mutant.cfg\` and \`ActorBorrowGeneration.stale-mutant.cfg\`. Model-checker receipt checks must distinguish a source-authored TLA+ specification from an actual TLC execution.
 
 ## Compiler-backed refinement fixture contract
 
@@ -42,3 +42,5 @@ Do not invent canonical native AttoLang syntax or pass from a host-side simulati
 The dashboard must keep these four independent statuses visible: \`MODEL_SOURCE_ONLY\`, \`MODEL_CHECK_EXECUTED\`, \`COMPILER_BUILD_EXECUTED\`, \`GUEST_EXECUTED\`. Only the last, with separately authenticated provenance, can become a per-backend guest result.
 
 This contract itself is source-authored design evidence. Nothing about inclusion in a PR, passing a mock, or receiving a green run qualifies the five-backend guest result.
+
+The reader-generation abstraction requires `NoOldReader`: active read leases must match the current owner epoch. A transfer while any reader is live is a distinct unsafe mutation and must be caught independently of writer-exclusivity or stale-writer controls.
