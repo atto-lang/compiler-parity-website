@@ -48,15 +48,21 @@ try {
   });
   const invalidJar=run({});
   assert.notEqual(invalidJar.status,0,'untrusted jar must be rejected');
+  assert.match(invalidJar.stdout+invalidJar.stderr,/FAILED|computed checksum did NOT match/i,
+    'wrong JAR must be rejected by the content hash, not an unrelated failure');
   assert.ok(!fs.existsSync(receipt),'invalid jar must never yield a completion receipt');
   const missingAttempt=run({GITHUB_RUN_ATTEMPT:''});
   assert.notEqual(missingAttempt.status,0,'missing attempt must be rejected');
+  assert.match(missingAttempt.stderr,/Run attempt is required/,
+    'invalid attempt must be rejected at its identity check');
   assert.ok(!fs.existsSync(receipt),'invalid attempt must not yield success');
   const wrongHead=run({EXPECTED_HEAD:'f'.repeat(40)});
   assert.notEqual(wrongHead.status,0,'wrong original source head must be rejected');
   const forgedDigest=createHash('sha256').update(fs.readFileSync(fakeJar)).digest('hex');
   const forgedJar=run({EXPECTED_JAR_SHA256:forgedDigest});
   assert.notEqual(forgedJar.status,0,'matching SHA256 with wrong upstream SHA1 must fail');
+  assert.match(forgedJar.stdout+forgedJar.stderr,/FAILED|computed checksum did NOT match/i,
+    'forged digest must fail because official upstream SHA1 disagrees');
   assert.ok(!fs.existsSync(receipt),'forged jar must not produce receipt');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
 console.log('PASS negative jar, expected-head, attempt, upstream-release hash and stale receipt gates');
