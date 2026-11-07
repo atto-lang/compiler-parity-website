@@ -187,10 +187,11 @@ function checkTlcParserLog(text,model){
 function checkTlcBaselineLog(text,model){
   const success='Model checking completed. No error has been found.';
   const match=/^([0-9]+) states generated, ([0-9]+) distinct states found, ([0-9]+) states left on queue\.$/m.exec(text);
+  const counts=match ? match.slice(1).map(Number) : [];
   must(text.includes('TLC2 Version') &&
     text.split(success).length===2 &&
-    match && Number(match[1])>=Number(match[2]) &&
-    Number(match[2])>0 && Number(match[3])===0 &&
+    counts.length===3 && counts.every(Number.isSafeInteger) &&
+    counts[0]>=counts[1] && counts[1]>0 && counts[2]===0 &&
     /^Finished in [^\n]{1,100} at \([^)]+\)$/m.test(text) &&
     !/(?:^|\n)\s*(?:Error:|Exception in thread|\*\*\* Error)/m.test(text),
     'TLC baseline lacks genuine full-search success markers: '+model);
