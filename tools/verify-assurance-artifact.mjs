@@ -47,6 +47,9 @@ export function inspectZip(bytes) {
         i+22+bytes.readUInt16LE(i+20)===bytes.length) {eocd=i;break;}
   }
   must(eocd>=0, 'ZIP end record missing or trailing bytes');
+  // Artifact evidence may not hide arbitrary opaque data in an EOCD comment.
+  must(bytes.readUInt16LE(eocd+20)===0,
+    'ZIP end-of-central-directory comment is not canonical evidence');
   const disk=bytes.readUInt16LE(eocd+4), centralDisk=bytes.readUInt16LE(eocd+6);
   const onDisk=bytes.readUInt16LE(eocd+8), count=bytes.readUInt16LE(eocd+10);
   const centralSize=bytes.readUInt32LE(eocd+12), centralAt=bytes.readUInt32LE(eocd+16);
@@ -68,6 +71,7 @@ export function inspectZip(bytes) {
     const external=bytes.readUInt32LE(cursor+38), local=bytes.readUInt32LE(cursor+42);
     const next=cursor+46+nameLen+extraLen+commentLen;
     must(next<=eocd && startDisk===0 && nameLen>0 &&
+      extraLen===0 && commentLen===0 &&
       compressed<=MAX_ZIP && uncompressed<=MAX_MEMBER &&
       method!==99 && (method===0 || method===8) &&
       (flags & 0x0001)===0 && compressed!==0xffffffff &&
@@ -89,7 +93,8 @@ export function inspectZip(bytes) {
     const localNameLen=bytes.readUInt16LE(local+26), localExtra=bytes.readUInt16LE(local+28);
     const dataAt=local+30+localNameLen+localExtra;
     must(localFlags===flags && localMethod===method &&
-      localNameLen===nameLen && dataAt+compressed<=centralAt &&
+      localNameLen===nameLen && localExtra===0 &&
+      dataAt+compressed<=centralAt &&
       (flags & ~0x0808)===0 &&
       bytes.subarray(local+30,local+30+nameLen).equals(
         bytes.subarray(cursor+46,cursor+46+nameLen)),
