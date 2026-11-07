@@ -101,7 +101,26 @@ This does not run under an untrusted pull-request workflow.
 2. From a clean, independently reviewed checkout of the verifier, prepare the
    same trusted pin as above, with the additional independently checked
    `repositoryId` (the numeric GitHub repository ID).
-3. Execute the read-only check from a trusted reviewer workstation:
+3. For TLC, reconstruct the input manifest independently from a clean
+   reviewer checkout at the pinned original `head` (not from the untrusted
+   ZIP) and add `modelInputManifestSha256` to the TLC trusted-pin JSON:
+
+```sh
+# Run from the independently reviewed original Git commit:
+test "$(git rev-parse HEAD)" = '<pinned-exact-head>'
+sha256sum formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh \
+  | sha256sum | awk '{print $1}'
+```
+
+   The printed lowercase 64-hex digest is the SHA-256 of the complete
+   `model-inputs.sha256` manifest **including exact paths and ordering**;
+   the verifier rejects any alternate or missing input. Never derive this
+   trusted pin by hashing the submitted artifact itself.
+4. Install Java 21 on the trusted workstation: Java evidence invokes the
+   reviewed `tools/VerifyArtifactGuestSurefire.java` in Java 21 source-file
+   mode to parse actual XML with XXE disabled, rather than trusting XML text
+   fragments or `tests="8"` alone.
+5. Execute the read-only check from a trusted reviewer workstation:
 
 ```sh
 ASSURANCE_READ_TOKEN=... node tools/verify-assurance-artifact.mjs \
@@ -124,7 +143,17 @@ data. TLC receipts must include source/run provenance, five model baseline
 and parser logs, three mutant traces, and a matching SHA-256 manifest.
 Java candidate receipts must include compiler-class and canonical `.atto`
 fixture SHA-256 manifests, matching checkout provenance and the guest
-Surefire XML. Once the archive checks pass, the original
+Surefire XML. A strict Java 21 DOM parser checks the exact eight expected
+direct testcases, suite identity and declared totals, and rejects XXE,
+duplicates, failures, skips, nested false positives and missing cases.
+TLC parser logs must actually show SANY semantic processing, each baseline
+must report successful full-state exploration with nonzero distinct states,
+zero queued states and normal completion, while each unsafe mutation must
+show the specific `Inv` invariant violation and a concrete initial trace.
+These textual markers are **indicators, not proof of faithful computation**:
+malicious PR code can still manufacture logs, so a trusted reviewer must
+inspect the underlying model checker and guest tool invocations. Once the
+archive checks pass, the original
 `verifyLiveCandidate` gate must also corroborate the current PR,
 root tree, canonical workflow, run attempt, assigned runner and required
 successful execution steps.
