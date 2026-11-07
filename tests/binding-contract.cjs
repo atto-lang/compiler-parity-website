@@ -27,12 +27,17 @@ assert.ok(view.html.includes('rt borrow')&&view.html.includes('rt take'),'owners
 assert.ok(view.html.includes('SEMANTIC CONTRACT')&&view.html.includes('NOT AN OBSERVED AST'),'model not labeled');
 assert.ok(view.filters.includes('Semantic area'),'semantic filter missing');
 const pr=render('prs');assert.ok(pr.filters.includes('Backend')&&pr.filters.includes('From date')===false,'date under advanced filters');
-for(const steps of [null,[],0,'UNKNOWN',4]){
+for(const steps of [null,[],0,'0','[]','null','UNKNOWN',4]){
  const {html}=render('ledger',d=>d.workflows.push({id:'fake-proof',prId:'java-2422',name:'SYNTHETIC_FORGED_GUEST',run:99999999999,job:'guest',jobId:101,attempt:1,steps,head:d.prs[0].head,tree:d.prs[0].tree,phase:'guest',guest:'EXECUTED',conclusion:'success',proof:{compilerBacked:true,guestExecuted:true,receiptVerified:true,independentlyAudited:false}}));
  assert.ok(html.includes('SYNTHETIC_FORGED_GUEST'));
  const card=html.slice(html.indexOf('SYNTHETIC_FORGED_GUEST')-250,html.indexOf('SYNTHETIC_FORGED_GUEST')+900);
- if(steps===null||steps===0||Array.isArray(steps))assert.ok(card.includes('Runner not admitted'),'zero step promoted: '+String(steps));
+ if(steps===null||steps===0||steps==='0'||steps==='[]'||steps==='null'||Array.isArray(steps))assert.ok(card.includes('Runner not admitted'),'zero step promoted: '+String(steps));
  if(steps==='UNKNOWN')assert.ok(card.includes('Steps uninspected'),'uninspected promoted');
  assert.ok(!card.includes('Guest verified'),'forged guest must remain unverified');
 }
-console.log('PASS 14/14 proposed binding cases; 5/5 unproven backend states; 5/5 forged/zero-step controls. Source-only.');
+const candidate=render('ledger',d=>d.workflows.push({id:'claimed-proof',prId:'java-2422',name:'SYNTHETIC_CLAIMED_FULL_PROOF',run:99999999998,job:'guest',jobId:999,attempt:1,steps:7,head:d.prs[0].head,tree:d.prs[0].tree,phase:'guest',guest:'EXECUTED',conclusion:'success',proof:{compilerBacked:true,guestExecuted:true,receiptVerified:true,independentlyAudited:true}}));
+const pos=candidate.html.indexOf('SYNTHETIC_CLAIMED_FULL_PROOF');
+const claimCard=candidate.html.slice(pos-280,pos+800);
+assert.ok(claimCard.includes('Guest receipt · not independently verified'),'JSON booleans must not self-certify a guest');
+assert.ok(!claimCard.includes('badge green">Guest verified'),'imported attestations must never be green');
+console.log('PASS 14/14 proposed binding cases; 5/5 unproven backend states; 9/9 forged/zero-step controls. Source-only.');
