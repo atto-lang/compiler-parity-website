@@ -65,8 +65,10 @@ export function validatePin(pin) {
     pin.requiredSteps.every(s => typeof s === 'string' && s.length > 0 && s.length <= 150) &&
     new Set(pin.requiredSteps).size === pin.requiredSteps.length,
     'missing/duplicate required step names');
-  requireEvidence(REQUIRED_STEPS[pin.kind].every(name=>pin.requiredSteps.includes(name)),
-    'required immutable checkout/real execution steps not pinned');
+  const mandatoryPositions=REQUIRED_STEPS[pin.kind].map(name=>pin.requiredSteps.indexOf(name));
+  requireEvidence(mandatoryPositions.every((position,i)=>
+    position>=0 && (i===0 || position>mandatoryPositions[i-1])),
+    'required immutable checkout, original-head preflight and execution steps not pinned in order');
   return pin;
 }
 export function validateCandidateReceipt(pin, receipt) {
