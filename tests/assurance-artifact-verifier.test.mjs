@@ -298,6 +298,23 @@ test('TLC baseline logs require version, completed full search, nonzero distinct
     assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(list))),/ARTIFACT_REJECTED/);
   }
 });
+test('TLC rejects unbounded and overflowing state counts even in signed-looking logs',()=>{
+  const p=pin();
+  for(const replacement of [
+    '999999999999999999999999999999999999 states generated, 99999999999999999999999999999999999 distinct states found, 0 states left on queue.',
+    '3 states generated, 5 distinct states found, 0 states left on queue.'
+  ]){
+    const files=tlcFiles(p);
+    const row=files.find(x=>x[0]==='ActorIsolation.baseline.log');
+    row[1]=row[1].replace(
+      '5 states generated, 5 distinct states found, 0 states left on queue.',
+      replacement);
+    files.find(x=>x[0]==='logs.sha256')[1]=
+      files.filter(x=>x[0].endsWith('.log'))
+        .map(([n,txt])=>sha(Buffer.from(txt))+'  private-artifacts/tlc/'+n).join('\n')+'\n';
+    assert.throws(()=>receiptFromArtifact(p,inspectZip(zip(files))),/ARTIFACT_REJECTED/);
+  }
+});
 test('TLC counterexample must be specific invariant failure plus initial state and no false success',()=>{
   const p=pin();
   for(const changed of [
