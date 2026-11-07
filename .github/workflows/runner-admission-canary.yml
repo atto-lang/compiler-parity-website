@@ -1,0 +1,45 @@
+name: Runner admission canary — source-free
+on:
+  push:
+    branches:
+      - 'fix/tlc-provenance-guest-canary-20261106'
+    paths:
+      - '.github/workflows/runner-admission-canary.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/runner-admission-canary.yml'
+  workflow_dispatch:
+
+# Deliberately no repository checkout, credentials, external actions or PR code.
+permissions: {}
+
+jobs:
+  source-free-runner-admission:
+    name: source-free-runner-admission-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Prove a hosted runner allocated and a shell step actually started
+        shell: bash
+        env:
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$GITHUB_JOB" =~ ^[a-zA-Z0-9_.-]+$ ]]
+          echo "SOURCE_FREE_RUNNER_STEP_EXECUTED"
+          printf 'event=%s run=%s attempt=%s job=%s\n' \
+            "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB"
+      - name: Record strictly scoped admission statement
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Source-free runner admission diagnostic'
+            echo ''
+            echo 'A shell step started on a GitHub-hosted runner.'
+            echo 'No checkout, source tree, AttoLang compiler, tests, model checker, or guest ran.'
+            echo 'This does NOT attest the PR source head or prove any CI contract.'
+          } >> "$GITHUB_STEP_SUMMARY"
