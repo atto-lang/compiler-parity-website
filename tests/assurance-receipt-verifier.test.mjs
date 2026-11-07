@@ -290,3 +290,13 @@ test('TLC original model/script HEAD step cannot be omitted, skipped or moved af
     f.payloads[f.base+path].jobs[0].steps[1].number=4;
   });
 });
+
+test('reviewer cannot reorder mandatory source-checkout, preflight and execution pins',async()=>{
+  await denied(f=>{f.pin.requiredSteps=[STEP_TLC,STEP_TLC_BLOB,STEP_CHECKOUT]});
+  await denied(f=>{f.pin.requiredSteps=[STEP_CHECKOUT,STEP_TLC,STEP_TLC_BLOB]});
+  await denied(f=>{f.pin.requiredSteps=[STEP_TLC_BLOB,STEP_CHECKOUT,STEP_TLC]});
+  await denied(f=>{
+    asJava(f);
+    f.pin.requiredSteps=[JAVA_TEST,JAVA_CHECKOUT];
+  });
+});
