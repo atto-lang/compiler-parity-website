@@ -12,7 +12,7 @@ const time='2026-11-06T10:00:00Z';
 const pin=()=>({
   repo:'example-org/private-project',pr:7,head:H,tree:T,
   runId:45,attempt:2,jobId:101,
-  jobName:'exact-head-tlc-safety-and-counterexamples',
+  jobName:'exact-head-tlc-safety-and-counterexamples',jobKey:'tlc-bounded-design',
   requiredSteps:[STEP_CHECKOUT,STEP_TLC],
   kind:'TLC_BOUNDED_MODEL_ONLY'
 });
@@ -21,7 +21,7 @@ const receipt=()=>({
   verification:'UNATTESTED_TOOL_RUN',guest:'NOT_EXECUTED',
   baseline_models:5,expected_invariant_counterexamples:3,
   source_head:H,source_tree:T,tool_sha256:DIGEST,
-  run_id:'45',run_attempt:'2',job:'exact-head-tlc-safety-and-counterexamples'
+  run_id:'45',run_attempt:'2',job:'tlc-bounded-design'
 });
 const step=name=>({
   name,status:'completed',conclusion:'success',
@@ -80,7 +80,7 @@ test('equivalent scoped Java candidate is never promoted to independent guest pr
   f.receipt={
     classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
     proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-    head:H,tree:T,run_id:'45',attempt:'2'
+    head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design'
   };
   const out=await verifyLiveCandidate(f.api,f.pin,f.receipt);
   assert.equal(out.kind,'JAVA_JVM_GUEST_CANDIDATE');
@@ -90,7 +90,7 @@ test('invalid pin inputs fail closed before any network request',()=>{
   for(const [field,value] of [
     ['repo','../private-project'],['head','not-a-hash'],['tree','!'.repeat(40)],
     ['pr',0],['runId',0],['attempt',-1],['jobId',null],
-    ['jobName','job name with spaces'],['kind','GUEST_PROVEN'],
+    ['jobName','job name with spaces'],['jobKey','contains spaces'],['kind','GUEST_PROVEN'],
     ['requiredSteps',[]],['requiredSteps',[STEP_TLC,STEP_TLC]],
     ['requiredSteps',[5]]
   ]){
@@ -184,7 +184,7 @@ test('Java self-labeled guest proof and changed source are not accepted',async()
     f.receipt={
       classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
       proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-      head:H,tree:T,run_id:'45',attempt:'2',[field]:value
+      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',[field]:value
     };
   });
 });
