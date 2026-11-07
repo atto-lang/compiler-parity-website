@@ -47,6 +47,15 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   echo "TRACKED_SOURCE_DIRTY" >&2
   exit 1
 fi
+# Untracked or symlinked TLA/config inputs can change model behavior while
+# HEAD and the tracked-tree identity stay unchanged. Reject all such inputs.
+for model_input in formal/specs/*.tla formal/specs/*.cfg; do
+  if [[ ! -f "$model_input" || -L "$model_input" ]] ||
+     ! git ls-files --error-unmatch -- "$model_input" >/dev/null 2>&1; then
+    echo "UNTRACKED_MODEL_INPUT: $model_input" >&2
+    exit 1
+  fi
+done
 actual_tree="$(git rev-parse 'HEAD^{tree}')"
 [[ "$actual_tree" =~ ^[0-9a-f]{40}$ ]]
 printf '%s  %s\n' "$EXPECTED_JAR_SHA256" "$TLA2TOOLS_JAR" | sha256sum -c -
