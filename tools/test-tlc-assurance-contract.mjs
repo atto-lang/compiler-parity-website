@@ -35,6 +35,9 @@ assert.match(script,/UNTRACKED_MODEL_INPUT/,
   'ignore Git HEAD alone is not enough: untracked TLA modules must be rejected');
 assert.match(script,/git ls-files --error-unmatch -- "\$model_input"/,
   'each compiled .tla/.cfg must be a tracked Git-tree input');
+assert.match(script,/MODEL_INPUT_BLOB_MISMATCH/);
+assert.match(script,/git hash-object -- "\$model_input"/);
+assert.match(script,/git rev-parse --verify "HEAD:\$model_input"/);
 assert.match(script,/TLA2TOOLS_JAR="\$\(realpath -e -- "\$TLA2TOOLS_JAR"\)"/,
   'normalize JAR to absolute path before TLC changes directory');
 assert.ok(script.indexOf('realpath -e --') < script.indexOf('pushd formal/specs'),
@@ -112,6 +115,45 @@ try {
   } finally {
     fs.rmSync(injectedModel,{force:true});
   }
+  // The Git status cleanliness check can be deceived by assume-unchanged.
+  // Reproduce that mutation in a fresh temporary repository, never by
+  // modifying tracked files in the real assurance checkout.
+  const scratch=path.join(tmp,'synthetic-model-head');
+  fs.mkdirSync(path.join(scratch,'tools'),{recursive:true});
+  fs.mkdirSync(path.join(scratch,'formal','specs'),{recursive:true});
+  fs.copyFileSync('tools/run-tlc-assurance.sh',
+    path.join(scratch,'tools','run-tlc-assurance.sh'));
+  const scratchModel=path.join(scratch,'formal','specs','Synthetic.tla');
+  fs.writeFileSync(scratchModel,'---- MODULE Synthetic ----\n====\n');
+  fs.writeFileSync(path.join(scratch,'formal','specs','Synthetic.cfg'),
+    'SPECIFICATION Spec\n');
+  const git=args=>{
+    const output=spawnSync('git',args,{cwd:scratch,encoding:'utf8',timeout:10000});
+    assert.equal(output.status,0,output.stderr||'scratch git failed');
+    return output.stdout.trim();
+  };
+  git(['init','-q']);
+  git(['config','user.name','Assurance Negative Fixture']);
+  git(['config','user.email','assurance-fixture@example.invalid']);
+  git(['add','tools/run-tlc-assurance.sh','formal/specs/Synthetic.tla',
+    'formal/specs/Synthetic.cfg']);
+  git(['commit','-qm','pinned synthetic model inputs']);
+  const scratchHead=git(['rev-parse','HEAD']);
+  git(['update-index','--assume-unchanged','--','formal/specs/Synthetic.tla']);
+  fs.appendFileSync(scratchModel,'\\* injected untracked bytes\n');
+  assert.equal(git(['status','--porcelain','--untracked-files=no']),'',
+    'scratch fixture must simulate a dirty tracked file omitted by git status');
+  const hiddenMutation=spawnSync('bash',['tools/run-tlc-assurance.sh'],{
+    cwd:scratch,encoding:'utf8',timeout:10000,
+    env:{...env,EXPECTED_HEAD:scratchHead}
+  });
+  assert.notEqual(hiddenMutation.status,0,
+    'assume-unchanged mutation cannot pass model admission');
+  assert.match(hiddenMutation.stdout+hiddenMutation.stderr,/MODEL_INPUT_BLOB_MISMATCH/,
+    'must reject on exact HEAD blob rather than later fake JAR checksum');
+  assert.equal(fs.existsSync(path.join(scratch,receipt)),false,
+    'no completion receipt may survive a hidden model mutation');
+  controls++;
   reject('missing jar',{TLA2TOOLS_JAR:path.join(tmp,'missing.jar')},/TLC_JAR_MISSING/);
   reject('missing source head',{EXPECTED_HEAD:''},/source HEAD is required/);
   reject('invalid source head',{EXPECTED_HEAD:'not-a-full-sha'},/Invalid source SHA/);
@@ -130,7 +172,7 @@ try {
   reject('caller re-pinning SHA-1',
     {EXPECTED_JAR_SHA1:'a'.repeat(40)},/UNAUTHORIZED_TLC_SHA1_REPIN/);
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
-assert.equal(controls,16,'all 16 negative admission controls must execute');
+assert.equal(controls,17,'all 17 negative admission controls must execute');
 console.log('PASS '+controls+' source-only negative controls: stale receipt, '+
   'wrong jar/hash, missing/mismatched head, run/attempt, injection and invalid job');
 console.log('SOURCE_ONLY: No TLC parser/model checker or AttoLang guest executed');
