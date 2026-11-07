@@ -19,9 +19,18 @@ rm -f private-artifacts/tlc/completed-source-only.json
 [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid run ID' >&2; exit 1; }
 [[ "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid attempt' >&2; exit 1; }
 [[ "$GITHUB_JOB" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo 'Invalid job identity' >&2; exit 1; }
-test -f "$TLA2TOOLS_JAR"
-test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-test -z "$(git status --porcelain --untracked-files=no)"
+if [[ ! -f "$TLA2TOOLS_JAR" ]]; then
+  echo "TLC_JAR_MISSING" >&2
+  exit 1
+fi
+if [[ "$(git rev-parse HEAD)" != "$EXPECTED_HEAD" ]]; then
+  echo "SOURCE_HEAD_MISMATCH" >&2
+  exit 1
+fi
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+  echo "TRACKED_SOURCE_DIRTY" >&2
+  exit 1
+fi
 actual_tree="$(git rev-parse 'HEAD^{tree}')"
 [[ "$actual_tree" =~ ^[0-9a-f]{40}$ ]]
 printf '%s  %s\n' "$EXPECTED_JAR_SHA256" "$TLA2TOOLS_JAR" | sha256sum -c -
@@ -54,7 +63,7 @@ for mutation in overlap stale; do
   status=0
   timeout 90s java -cp "$TLA2TOOLS_JAR" tlc2.TLC -deadlock -workers 1 \
     -config "$config" ActorBorrowGeneration.tla > "$output" 2>&1 || status=$?
-  if [[ "$status" -eq 0 || "$status" -eq 124 || "$status" -eq 137 ]]; then
+  if [[ "$status" -eq 0 || "$status" -ge 124 ]]; then
     echo "Mutant passed, hung, or was terminated: $mutation ($status)" >&2
     exit 1
   fi
