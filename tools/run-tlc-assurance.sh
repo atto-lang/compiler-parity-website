@@ -3,6 +3,11 @@
 set -euo pipefail
 umask 077
 
+# The published v1.7.4 release digests are immutable toolchain policy,
+# not values a caller is allowed to re-pin through the environment.
+readonly TLC_174_SHA256='936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
+readonly TLC_174_SHA1='bee4a54f3ee3d4afc347c3240ec2d9e93b075104'
+
 # A reused workspace must never contribute previous logs or completion markers.
 # This path is a repository-local generated-artifact directory, not user data.
 rm -rf -- private-artifacts/tlc
@@ -18,6 +23,10 @@ mkdir -p private-artifacts/tlc
 [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid source SHA' >&2; exit 1; }
 [[ "$EXPECTED_JAR_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Invalid jar SHA-256' >&2; exit 1; }
 [[ "$EXPECTED_JAR_SHA1" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid jar SHA-1' >&2; exit 1; }
+[[ "$EXPECTED_JAR_SHA256" == "$TLC_174_SHA256" ]] ||
+  { echo 'UNAUTHORIZED_TLC_SHA256_REPIN' >&2; exit 1; }
+[[ "$EXPECTED_JAR_SHA1" == "$TLC_174_SHA1" ]] ||
+  { echo 'UNAUTHORIZED_TLC_SHA1_REPIN' >&2; exit 1; }
 [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid run ID' >&2; exit 1; }
 [[ "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid attempt' >&2; exit 1; }
 [[ "$GITHUB_JOB" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo 'Invalid job identity' >&2; exit 1; }
@@ -25,6 +34,11 @@ if [[ ! -f "$TLA2TOOLS_JAR" ]]; then
   echo "TLC_JAR_MISSING" >&2
   exit 1
 fi
+# The script changes directory to formal/specs below. A caller-supplied
+# relative JAR path would otherwise resolve under the WRONG directory.
+TLA2TOOLS_JAR="$(realpath -e -- "$TLA2TOOLS_JAR")"
+[[ "$TLA2TOOLS_JAR" = /* ]] ||
+  { echo 'TLC_JAR_NOT_ABSOLUTE' >&2; exit 1; }
 if [[ "$(git rev-parse HEAD)" != "$EXPECTED_HEAD" ]]; then
   echo "SOURCE_HEAD_MISMATCH" >&2
   exit 1
