@@ -50,7 +50,7 @@ function fixture(){
       total_count:1,jobs:[{
         id:101,name:'exact-head-tlc-safety-and-counterexamples',
         run_id:45,run_attempt:2,head_sha:H,
-        check_run_url:apiBase+'/check-runs/101',
+        check_run_url:'https://api.github.com'+apiBase+'/check-runs/101',
         runner_id:8,runner_name:'GitHub Actions 1',
         status:'completed',conclusion:'success',
         steps:[step(STEP_CHECKOUT),step(STEP_TLC)]
