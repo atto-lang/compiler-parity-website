@@ -14,13 +14,13 @@ const pin=()=>({
   runId:45,attempt:2,jobId:101,
   jobName:'exact-head-tlc-safety-and-counterexamples',jobKey:'tlc-bounded-design',
   requiredSteps:[STEP_CHECKOUT,STEP_TLC],
-  kind:'TLC_BOUNDED_MODEL_ONLY'
+  kind:'TLC_BOUNDED_MODEL_ONLY',toolSha256:'936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
 });
 const receipt=()=>({
   classification:'TLC_BOUNDED_MODEL_ONLY',
   verification:'UNATTESTED_TOOL_RUN',guest:'NOT_EXECUTED',
   baseline_models:5,expected_invariant_counterexamples:3,
-  source_head:H,source_tree:T,tool_sha256:DIGEST,
+  source_head:H,source_tree:T,tool_sha256:'936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88',
   run_id:'45',run_attempt:'2',job:'tlc-bounded-design'
 });
 const step=name=>({
@@ -77,10 +77,13 @@ test('matching source, tree, attempt, job and two real steps yield only candidat
 test('equivalent scoped Java candidate is never promoted to independent guest proof',async()=>{
   const f=fixture();
   f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
+  f.pin.compilerSha256=DIGEST;
+  f.pin.fixtureSha256=DIGEST;
   f.receipt={
     classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
     proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-    head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design'
+    head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
+    compiler_class_sha256:DIGEST,fixture_sha256:DIGEST
   };
   const out=await verifyLiveCandidate(f.api,f.pin,f.receipt);
   assert.equal(out.kind,'JAVA_JVM_GUEST_CANDIDATE');
@@ -181,10 +184,29 @@ test('Java self-labeled guest proof and changed source are not accepted',async()
     ['tree','a'.repeat(40)],['run_id','0'],['attempt','0']
   ])await denied(f=>{
     f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
+    f.pin.compilerSha256=DIGEST;
+    f.pin.fixtureSha256=DIGEST;
     f.receipt={
       classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
       proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
-      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',[field]:value
+      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
+      compiler_class_sha256:DIGEST,fixture_sha256:DIGEST,[field]:value
+    };
+  });
+});
+
+test('toolchain and fixture identities cannot be asserted without pins',async()=>{
+  await denied(f=>{f.pin.toolSha256='e'.repeat(64)});
+  await denied(f=>{f.receipt.tool_sha256='e'.repeat(64)});
+  await denied(f=>{f.pin.kind='JAVA_JVM_GUEST_CANDIDATE'});
+  await denied(f=>{
+    f.pin.kind='JAVA_JVM_GUEST_CANDIDATE';
+    f.pin.compilerSha256=DIGEST;f.pin.fixtureSha256=DIGEST;
+    f.receipt={
+      classification:'SCOPED_SUREFIRE_CASES_OBSERVED',
+      proof:'NOT_INDEPENDENTLY_VERIFIED',guest:'CANDIDATE_ONLY',
+      head:H,tree:T,run_id:'45',attempt:'2',job:'tlc-bounded-design',
+      compiler_class_sha256:'e'.repeat(64),fixture_sha256:DIGEST
     };
   });
 });
