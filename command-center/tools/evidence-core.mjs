@@ -46,6 +46,9 @@ export function corroborateMetadata(pin,facts){
   same(run.id,pin.runId,'Run identity');
   same(run.head_sha,pin.head,'Workflow head');
   same(run.path,pin.workflowPath,'Workflow path');
+  same(run.repository?.full_name,pin.repo,'Workflow repository');
+  // An exact SHA is not sufficient if this workflow was triggered by a different PR.
+  if(!Array.isArray(run.pull_requests)||!run.pull_requests.some(p=>p.number===pin.number&&p.head?.sha===pin.head))throw Error('Workflow has no matching PR association');
   same(run.run_attempt,pin.attempt,'Run attempt');
   if(!['pull_request','pull_request_target'].includes(run.event))throw Error('Wrong workflow event');
   if(run.status!=='completed'||run.conclusion!=='success')throw Error('Workflow not successful');

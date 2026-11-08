@@ -14,7 +14,7 @@ const steps=[
 function facts(){return {
  pr:{number:12,base:{repo:{full_name:pin.repo}},head:{sha:H}},
  commit:{sha:H,tree:{sha:T}},
- run:{id:123,head_sha:H,path:pin.workflowPath,run_attempt:2,event:'pull_request',status:'completed',conclusion:'success'},
+ run:{id:123,head_sha:H,path:pin.workflowPath,repository:{full_name:pin.repo},pull_requests:[{number:12,head:{sha:H}}],run_attempt:2,event:'pull_request',status:'completed',conclusion:'success'},
  job:{id:456,name:pin.jobName,run_id:123,run_attempt:2,status:'completed',conclusion:'success',runner_id:10,steps:structuredClone(steps)},
  jobsComplete:true
 };}
@@ -43,7 +43,7 @@ test('a positive metadata check is still NOT a guest or merge receipt',()=>{
  assert.equal(r.mergeAuthorized,false);
  assert.equal(r.executedSteps,3);
 });
-test('17 integrity and adversarial negatives reject falsified metadata',()=>{
+test('20 integrity and adversarial negatives reject falsified metadata',()=>{
  const scenarios=[
  x=>x.pr.head.sha='c'.repeat(40),
  x=>x.pr.base.repo.full_name='outside/org',
@@ -52,6 +52,9 @@ test('17 integrity and adversarial negatives reject falsified metadata',()=>{
  x=>x.run.run_attempt=3,
  x=>x.run.path='.github/workflows/other.yml',
  x=>x.run.event='workflow_dispatch',
+ x=>x.run.repository.full_name='other/repo',
+ x=>x.run.pull_requests=[],
+ x=>x.run.pull_requests[0].head.sha='c'.repeat(40),
  x=>x.run.conclusion='failure',
  x=>x.job.id=457,
  x=>x.job.name='forged-display-job',
