@@ -60,12 +60,12 @@ All imported JSON remains **unattested input**. Never host private-source PR met
 
 ## Refresh GitHub metadata privately
 
-`tools/collect-github.mjs` is a read-only, bounded API collector. It updates PR head/tree and job metadata for the tracked PRs. It does **not** read or mirror code, mutate GitHub, download artifacts, verify executable guest output, or merge PRs. It caps response size to 1 MiB, requests to 120, and fetches only the latest three exact-head workflow runs with first-page jobs. Those limits are explicit; incomplete pagination is **unverified**, never silently treated as exhaustive.
+`tools/refresh.mjs` is a read-only, bounded API collector. It updates PR head/tree and job metadata for the tracked PRs. It does **not** read or mirror code, mutate GitHub, download artifacts, verify executable guest output, or merge PRs. It caps response size to 2 MiB, requests to 160, and fetches only the latest two exact-head workflow runs with first-page jobs. Those limits are explicit; incomplete pagination is **unverified**, never silently treated as exhaustive.
 
 Use a read-only GitHub token authorized to see the selected private repositories. Run from a trusted workstation/private CI runner, not untrusted PR code:
 
 ```sh
-GITHUB_TOKEN='…' node tools/collect-github.mjs --output ./snapshot.private.json
+GITHUB_TOKEN='…' node tools/refresh.mjs --input ./exported-command-center.json --output ./snapshot.private.json
 ```
 
 Import `snapshot.private.json` in the site's **Import** button. The collector writes mode `0600` and marks `METADATA_CORROBORATED_CANDIDATE_ONLY`. It does not claim native guests or semantic parity. **Do not commit the generated private snapshot to a public branch.** A privileged carrier would require explicit source-policy authorization before any cross-organization checkout/mirroring; this collector does not perform that action.
@@ -85,10 +85,12 @@ For a true ongoing hosted dashboard, a trusted private data pipeline should add 
 ## Test and review
 
 ```sh
-node tests/smoke.cjs
-node --check app.js
-node --check data.js
-node --check tools/collect-github.mjs
+node tests/site-smoke.cjs
+node --test tests/evidence.test.mjs
+node --check tools/evidence-core.mjs
+node --check tools/github-api.mjs
+node --check tools/refresh.mjs
+node --check tools/verify-run.mjs
 ```
 
 The smoke test checks dataset integrity, ten view renders, zero-step/unknown/host/canary/guest classification, fail-closed merge gating and SoA/AoS/AoSoA logical geometry. These are **Node host/source-only tests**. They are not a real browser security test, compiled Atto guest, NativeAOT receipt, TLC run or formal parity test. Run actual browser accessibility and responsive checks before public deployment.
@@ -96,3 +98,18 @@ The smoke test checks dataset integrity, ten view renders, zero-step/unknown/hos
 ## Private deployment guidance
 
 Use an access-controlled static host (e.g. company-internal storage behind SSO) only after reviewing what GitHub metadata can be disclosed. This prototype makes no network calls at runtime (`connect-src 'none'` Content Security Policy) and has no merge/approval/Actions permissions. Do **not** enable public GitHub Pages or public mirror of a private org's PR information without a separate security/ownership review.
+## Reviewer-side independent GitHub metadata corroboration
+
+The collector requires **--input** with a previously exported `schemaVersion:2` JSON snapshot; it never evaluates JavaScript or requires a copied private source tree. The default site seed is available only inside the static HTML; export it once in the UI, then run refresh privately on a trusted machine.
+
+The separate `tools/verify-run.mjs` uses a **reviewer-authored pin** containing `repo`, `number`, full `head`, full `tree`, `workflowPath`, `runId`, `attempt`, `jobId`, `jobName` and ordered `requiredSteps` (exact checkout and real execution step names). Run:
+
+```sh
+GITHUB_TOKEN='…' node tools/verify-run.mjs --pin /trusted/reviewer-pin.json
+```
+
+This verifier independently reads the current PR, Git commit tree, run identity and one attempted job. It rejects stale heads, wrong attempts, duplicate jobs and step names, zero or failed/unstarted steps, mismatched workflow/job identities and unbounded pagination. A positive verdict is **`GITHUB_METADATA_CORROBORATED_CANDIDATE_ONLY`**. It cannot authenticate artifact ZIP bytes, compiler binary fingerprints, guest stdout, negative semantic diagnostics, independent review authority or branch protection; those are explicit separate blockers. **No `RECEIPT_VERIFIED` claim is produced.**
+
+`command-center-ci.yml` is deliberately source-only, checks out the exact PR head, and runs UI/adversarial Node tests with **read-only contents permissions and no GitHub token passed to the test processes**. Its job cannot create/approve/merge PRs or publish private metadata. A workflow failure with zero job steps remains runner admission failure, not a code test failure.
+
+**Branch coordination:** This isolated directory does not modify existing dashboard root files, collector/TLC PR #3/#5/#7/#10 branches, public Pages, or compiler source repos. Current branch protection was not established by the site; independent governance remains mandatory before merge.
