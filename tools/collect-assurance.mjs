@@ -10,6 +10,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import vm from 'node:vm';
 import { pathToFileURL } from 'node:url';
+import { boundedGitHubJson } from './assurance-bounded-json-v1.mjs';
 
 const API = 'https://api.github.com';
 export const MAX_RECORDS = 100;
@@ -67,7 +68,7 @@ export class GitHubReadOnly {
     });
     if (response.status === 404 && optional404) return null;
     if (!response.ok) throw new Error('GitHub metadata request failed (HTTP ' + response.status + ')');
-    return response.json();
+    return boundedGitHubJson(response);
   }
 }
 
