@@ -60,7 +60,7 @@ All imported JSON remains **unattested input**. Never host private-source PR met
 
 ## Refresh GitHub metadata privately
 
-`tools/refresh.mjs` is a read-only, bounded API collector. It updates PR head/tree and job metadata for the tracked PRs. It does **not** read or mirror code, mutate GitHub, download artifacts, verify executable guest output, or merge PRs. It caps response size to 2 MiB, requests to 160, and fetches only the latest two exact-head workflow runs with first-page jobs. Those limits are explicit; incomplete pagination is **unverified**, never silently treated as exhaustive.
+`tools/refresh.mjs` is a read-only, bounded API collector. It updates PR head/tree and job metadata for the tracked PRs. It does **not** read or mirror code, mutate GitHub, download artifacts, verify executable guest output, or merge PRs. It caps response size to 2 MiB, requests to 220, and fetches only the latest two exact-head workflow runs with first-page jobs. Those limits are explicit; incomplete pagination is **unverified**, never silently treated as exhaustive.
 
 Use a read-only GitHub token authorized to see the selected private repositories. Run from a trusted workstation/private CI runner, not untrusted PR code:
 
@@ -113,3 +113,8 @@ This verifier independently reads the current PR, Git commit tree, run identity 
 `command-center-ci.yml` is deliberately source-only, checks out the exact PR head, and runs UI/adversarial Node tests with **read-only contents permissions and no GitHub token passed to the test processes**. Its job cannot create/approve/merge PRs or publish private metadata. A workflow failure with zero job steps remains runner admission failure, not a code test failure.
 
 **Branch coordination:** This isolated directory does not modify existing dashboard root files, collector/TLC PR #3/#5/#7/#10 branches, public Pages, or compiler source repos. Current branch protection was not established by the site; independent governance remains mandatory before merge.
+
+
+## Full open-PR inventory discovery
+
+Use `tools/discover-inventory.mjs` from a trusted private workstation with a least-privilege read-only token to paginate the source-defined repository allowlist, read current PR heads/root trees and submitted reviews, and write a new mode-0600 candidate snapshot. It never copies source, downloads artifacts, changes GitHub or promotes guest/merge proof. See [INVENTORY_DISCOVERY.md](INVENTORY_DISCOVERY.md) for limits, usage and completeness semantics. Output remains private and untrusted until independently reviewed.

@@ -42,8 +42,10 @@ jobs:
           node --check command-center/tools/github-api.mjs
           node --check command-center/tools/refresh.mjs
           node --check command-center/tools/verify-run.mjs
+          node --check command-center/tools/discover-inventory.mjs
           node command-center/tests/site-smoke.cjs
           node --test command-center/tests/evidence.test.mjs
+          node --test command-center/tests/inventory.test.mjs
           echo 'ATTO_GUEST_COMPILER_EXECUTION=NOT_EXECUTED'
           echo 'TLC_EXECUTION=NOT_EXECUTED'
           echo 'METADATA_VERDICT=SOURCE_ONLY_TESTS'
