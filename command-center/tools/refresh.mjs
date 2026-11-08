@@ -47,8 +47,10 @@ export async function refresh(snapshot,get,{maxRuns=2}={}){
       prRow.exactHeadChecks=false;
       prRow.protectionApproved=false;
       const response=await get(prefix+'/actions/runs?head_sha='+head+'&per_page=30');
-      if(!response.complete||!Array.isArray(response.data?.workflow_runs))throw Error('Run pagination incomplete');
-      if(response.data.workflow_runs.length>=30||response.data.total_count>30)throw Error('Run page boundary incomplete');
+      if(!Array.isArray(response.data?.workflow_runs))throw Error('Malformed workflow run page');
+      // Latest-run sampling is intentionally NON-exhaustive; incompleteness is explicit.
+      // No run-count or absence-of-evidence claim is made from this bounded window.
+      prRow.runWindowTruncated=!response.complete||Number(response.data.total_count)>response.data.workflow_runs.length;
       const runs=response.data.workflow_runs.filter(r=>r.head_sha===head&&POS(r.id)).slice(0,maxRuns);
       for(const run of runs){
         if(!POS(run.run_attempt))throw Error('Missing workflow run attempt');

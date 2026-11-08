@@ -121,3 +121,17 @@ test('readback mismatch cannot certify stale snapshot',async()=>{
  assert.equal(out.prs[0].tree,null);
  assert.equal(out.prs[0].attestedGuestReceipt,false);
 });
+
+test('bounded latest-run sampling reports partial history, never completeness',async()=>{
+ const x=facts();
+ const get=async url=>{
+  if(url.endsWith('/pulls/12'))return{complete:true,data:{...x.pr,draft:true,state:'open',merged:false,updated_at:'2026-11-08T20:00:00Z'}};
+  if(url.endsWith('/git/commits/'+H))return{complete:true,data:x.commit};
+  if(url.includes('/actions/runs?'))return{complete:false,data:{workflow_runs:[x.run],total_count:137}};
+  return{complete:true,data:{jobs:[x.job],total_count:1}};
+ };
+ const out=await refresh(base(),get);
+ assert.equal(out.prs[0].runWindowTruncated,true);
+ assert.equal(out.jobs.length,1);
+ assert.equal(out.refresh.guestParity,'UNPROVEN');
+});
