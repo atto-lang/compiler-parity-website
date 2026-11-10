@@ -11,7 +11,7 @@ for(const view of views){
  const ctx={window:{addEventListener(){},scrollTo(){}},document:{querySelector:()=>e('q'),getElementById:e,addEventListener(){}},localStorage:{getItem(){return null},setItem(){}},location:{hash:'#'+view},navigator:{},console,Date,Set,JSON,Math,Object,Number,String,RegExp,Array,encodeURI,URL,Blob,setTimeout,clearTimeout};
  ctx.window.location=ctx.location;vm.createContext(ctx);vm.runInContext(data,ctx);vm.runInContext(source,ctx);
  const out=e('view').innerHTML;assert.ok(out.length>500,'empty view '+view);assert.ok(!out.includes('undefined'),'bad interpolation '+view);
- if(view==='browser'){assert.match(out,/oreslang-source.rs/);assert.match(out,/ACTOR GAP/);assert.match(out,/42920472681/);assert.match(out,/full compiler parity remains unverified/);}
+ if(view==='browser'){assert.match(out,/oreslang-source.rs/);assert.match(out,/ACTOR GAP/);assert.match(out,/42921459862/);assert.match(out,/full compiler parity remains unverified/);}
  if(view==='overview'){assert.match(out,/Confirmed guest proofs/);assert.match(out,/NOT_EXECUTED/);assert.match(out,/steps=\[\]/)}
  if(view==='prs')assert.equal((out.match(/data-pr-open=/g)||[]).length,11);
  if(view==='ledger'){assert.equal((out.match(/data-workflow-open=/g)||[]).length,13);assert.match(out,/Runner not admitted/);assert.match(out,/Host-only/)}
