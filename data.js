@@ -113,13 +113,13 @@ window.ATTO_BROWSER = {
       "backend": "JavaScript transpiler",
       "repo": "ores-truffle-oreslang/oreslang-source.js",
       "state": "INTEGRATION CANDIDATE",
-      "detail": "Explicit canonical-browser adapter consumes the Rust compiler artifact and emits ESM including source-defined actors. Legacy default scalar/program-v2 profiles remain separate."
+      "detail": "Canonical-browser ESM and Wasm now share the pinned tenant scheduler: one Worker per tenant, private actor memories, MessageChannel turns, FIFO and aggregate quotas. Source Task/await lowering remains unsupported."
     },
     {
       "backend": "Wasm browser bridge",
       "repo": "ores-truffle-oreslang/oreslang-source.wasm",
       "state": "INTEGRATION CANDIDATE",
-      "detail": "On-device compiler-ABI adapter. Existing native LLVM/Clang zero-import scalar host is a separate path and is unchanged."
+      "detail": "On-device compiler-ABI adapter plus the exact pinned JS tenant runtime; both output targets execute through the same carrier. Native LLVM/Clang zero-import scalar host is unchanged."
     },
     {
       "backend": "Rust native",
