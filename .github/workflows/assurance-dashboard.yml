@@ -8,6 +8,15 @@ on:
       - 'formal-data.js'
       - 'formal/**'
       - 'tools/collect-assurance.mjs'
+      - 'tools/verify-assurance-receipt.mjs'
+      - 'tools/verify-assurance-artifact.mjs'
+      - 'tools/VerifyArtifactGuestSurefire.java'
+      - 'tests/assurance-artifact-verifier.test.mjs'
+      - 'tests/assurance-receipt-verifier.test.mjs'
+      - 'tools/run-tlc-assurance.sh'
+      - 'tools/test-tlc-assurance-contract.mjs'
+      - 'docs/TLC_TOOLCHAIN_PROVENANCE.md'
+      - '.github/workflows/assurance-tlc.yml'
       - 'tests/formal-security.test.cjs'
       - 'tests/assurance-collector.test.mjs'
       - 'tests/formal-models.test.mjs'
@@ -28,7 +37,7 @@ jobs:
       EXPECTED_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout immutable source head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -46,31 +55,51 @@ jobs:
             "$actual" "$tree" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB" \
             > private-artifacts/exact-head-source-only-receipt.json
       - name: Install Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
+      - name: Install Java 21 for structural Surefire artifact verification
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Validate syntax
         run: |
           node --check formal-data.js
           node --check formal-security.js
           node --check tools/collect-assurance.mjs
+          node --check tools/verify-assurance-receipt.mjs
+          node --check tools/verify-assurance-artifact.mjs
+          node --check tests/assurance-artifact-verifier.test.mjs
+          node --check tests/assurance-receipt-verifier.test.mjs
           node --check formal/check-models.mjs
           node --check tests/formal-security.test.cjs
           node --check tests/assurance-collector.test.mjs
           node --check tests/formal-models.test.mjs
+          node --check tools/test-tlc-assurance-contract.mjs
       - name: Run dashboard source-only tests
         run: node tests/formal-security.test.cjs
       - name: Run mocked metadata collector tests
         run: node --test tests/assurance-collector.test.mjs
-      - name: Execute bounded design models and six negative mutations
+      - name: Test independent receipt metadata readback gate using forged GitHub fixtures
+        run: node --test tests/assurance-receipt-verifier.test.mjs
+      - name: Test authenticated ZIP archive digest and provenance rejection cases (mocked API)
+        run: node --test tests/assurance-artifact-verifier.test.mjs
+      - name: Execute bounded design models and ten negative mutations
         run: |
           node --test tests/formal-models.test.mjs
           node formal/check-models.mjs --json > private-artifacts/bounded-model-results.json
+      - name: Verify TLC runner admission and fail-closed negative harness (source only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tools/run-tlc-assurance.sh
+          node tools/test-tlc-assurance-contract.mjs
       - name: Guard original engineering command center
         run: node tests/smoke.cjs
       - name: Upload privately scoped host-only evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: assurance-source-only-${{ github.run_id }}-${{ github.run_attempt }}
           path: private-artifacts/*.json

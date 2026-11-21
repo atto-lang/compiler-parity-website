@@ -12,13 +12,13 @@ a verified compiler, or an AttoLang guest execution.
 
 The checker exhaustively explores finite reachable model states within explicit
 depth/state limits, reports depth truncation, and fails closed if the state cap
-is exceeded. Nine behavior-changing unsafe mutants must each produce a
+is exceeded. Ten behavior-changing unsafe mutants must each produce a
 counterexample action trace. Syntax-invalid mutants do not count.
 
 | Model | Explicit bound | Safety obligation | Negative controls |
 | --- | --- | --- | --- |
 | Actor ownership | Two actors, one slot, one transfer | Owner-only read/write; exclusive writer | Foreign writer |
-| Borrow and actor generation | A/B actors, up to two readers, one writer, two epochs | Reader/writer exclusion, generation fencing | Writer during read; stale writer after rt take |
+| Borrow and actor generation | A/B actors, up to two readers, one writer, two epochs | Reader/writer exclusion, generation fencing | Writer during read; stale writer after rt take; transfer with live reader |
 | Cancellation | One waiter and charged resource | Exactly-once completion and enabled wakeup | Lost wakeup; double completion |
 | RELIABLE pub-sub | Two publishers, two sends each, capacity one, two generations | No early ACK, stale queue or duplicate ACK | Early ACK; stale generation; retained cancelled queue |
 | Hot reload | One ActorRef, two generations, one ticket | No stale ticket/retired execution | Retain old-generation ticket |
@@ -87,7 +87,7 @@ report. The browser can render the report, but does not authenticate it.
 
 The exact-head TLC workflow .github/workflows/assurance-tlc.yml runs five baseline
 TLA+ specs, including ActorBorrowGeneration.tla, then requires expected invariant
-counterexamples from two intentionally unsafe mutation configs. It uses a pinned
+counterexamples from three intentionally unsafe mutation configs. It uses a pinned
 tla2tools.jar SHA-256, Java 21, source-head readback, and private seven-day logs.
 This workflow is source-only; it never compiles or executes .atto guests.
 The jar source and digest must be reviewed independently before enabling this lane
@@ -102,3 +102,5 @@ The first proposed implementation refinement is documented in
 formal/refinement/ACT-BORROW-V1.md. It distinguishes current Java critical actor
 source fixtures from unimplemented two-reader borrow and ownership transfer
 acceptance. Source-authored fixtures are NOT compiler-backed guest evidence.
+
+The actor-borrow TLA+ and JavaScript models now track the generation of outstanding shared-reader leases. The negative `take-while-readers-active` mutation must violate `NoOldReader` after a two-step read→transfer trace. No claim of production refinement follows from the bounded check.

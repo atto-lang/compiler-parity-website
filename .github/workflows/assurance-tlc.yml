@@ -6,6 +6,7 @@ on:
       - 'formal/check-models.mjs'
       - 'formal/refinement/**'
       - 'tools/run-tlc-assurance.sh'
+      - 'tools/test-tlc-assurance-contract.mjs'
       - '.github/workflows/assurance-tlc.yml'
   workflow_dispatch:
 permissions:
@@ -18,10 +19,11 @@ jobs:
     env:
       EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       TLA2TOOLS_JAR: ${{ runner.temp }}/tla2tools.jar
-      EXPECTED_JAR_SHA256: ab323b79802aedc3203b3f9af37c6aca3ed43f4e0225b36f2aa77b26de46c05f
+      EXPECTED_JAR_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+      EXPECTED_JAR_SHA1: bee4a54f3ee3d4afc347c3240ec2d9e93b075104
     steps:
       - name: Checkout exact original head (never synthetic PR merge)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -32,23 +34,48 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           test "$(git rev-parse 'HEAD^{tree}' | wc -c)" -eq 41
       - name: Install Java 21 for TLC
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
         with:
           distribution: temurin
           java-version: '21'
-      - name: Download immutable named TLC build; require pinned SHA256
+      - name: Download official upstream TLC release; require observed SHA256
         shell: bash
         run: |
           set -euo pipefail
-          url='https://github.com/zactionsz/tla-tools/releases/download/tla2tools-2026.08.11.125311/tla2tools.jar'
+          # Prefer stable upstream v1.7.4, not the mutable rolling v1.8.0 prerelease.
+          # SHA256 independently published by SourceForge's historical release mirror;
+          # SHA1 is from official upstream v1.7.4 release notes.
+          # Both checks must pass; an artifact URL alone is not a trusted pin.
+          url='https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar'
           curl --fail --location --retry 3 --max-time 90 --silent --show-error "$url" -o "$TLA2TOOLS_JAR"
           echo "$EXPECTED_JAR_SHA256  $TLA2TOOLS_JAR" | sha256sum -c -
-      - name: Execute real TLC for five bounded models and two unsafe-mutant controls
+          echo "$EXPECTED_JAR_SHA1  $TLA2TOOLS_JAR" | sha1sum -c -
+      - name: Install Node.js 22 for the source-only negative gate
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Independently verify TLC model and runner script HEAD blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          for model_input in formal/specs/*.tla formal/specs/*.cfg tools/run-tlc-assurance.sh; do
+            test -f "$model_input" && test ! -L "$model_input"
+            git ls-files --error-unmatch -- "$model_input" >/dev/null
+            test "$(git hash-object -- "$model_input")" = "$(git rev-parse --verify "HEAD:$model_input")"
+          done
+      - name: Validate runner script and provenance rejection cases
+        shell: bash
+        run: |
+          bash -n tools/run-tlc-assurance.sh
+          node tools/test-tlc-assurance-contract.mjs
+      - name: Execute real TLC for five bounded models and three unsafe-mutant controls
         shell: bash
         run: bash tools/run-tlc-assurance.sh
       - name: Upload source-only TLC logs (no compiler or guest assertions)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tlc-bounded-source-only-${{ github.run_id }}-${{ github.run_attempt }}
           path: private-artifacts/tlc/
