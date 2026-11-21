@@ -102,11 +102,11 @@ head** rather than the default synthetic pull-request merge ref. Once a runner
 actually executes, it compares the Git head to the expected SHA, records the
 full tree and run/attempt/job identity, and runs the original dashboard smoke,
 assurance view tests, mocked collector tests, and bounded state models with
-six behavior-changing mutation controls. It uploads a private
+nine behavior-changing mutation controls. It uploads a private
 **SOURCE_ONLY_SITE_TEST** receipt. Neither artifact nor workflow success
 certifies AttoLang guest execution or independent receipt authentication.
 
-The separate scheduled collector workflow reads only explicitly scoped GitHub
+The separate manual-only collector workflow reads only explicitly scoped GitHub
 API metadata using the dedicated Actions secret named
 ATTO_ASSURANCE_READ_TOKEN. An admin must provision an appropriately restricted
 read-only credential authorized for the source repositories (contents metadata,
@@ -114,7 +114,7 @@ pull requests, Actions runs/jobs and branch protection as applicable). The
 collector fails closed without that secret. It never fetches source files or
 writes back to GitHub, does not automatically publish snapshot JSON into this
 private static website, and emits a private artifact with seven-day retention.
-The schedule only operates after workflow code is merged to the default branch.
+Its periodic schedule is intentionally disabled pending administrator authorization and runner repair.
 
 To run the collector locally, from the repo root:
 
@@ -136,3 +136,24 @@ been verified.
 workflows initially failed with steps=null. Their reruns were requested.
 No claim of successful stepful hosted CI is made until job-step readback proves it.
 
+
+### Unified collector / borrow-generation hardening
+
+The next reviewable change set integrates the useful improvements from the
+overlapping collector draft into the original canonical tools/collect-assurance.mjs
+rather than enabling two token-bearing readers. Workflow attempt-scoped job records,
+genuine started-step classification, duplicate job-name rejection and fail-closed
+incomplete result pages now inform the dashboard's expanded per-job ledger.
+An imported run-head match is never interpreted as proof of what source the runner
+actually checked out.
+
+The canonical bounded checker now includes a fifth actor borrow/generation model
+(two concurrent readers, exclusive writer, rt take ownership generation), with nine
+negative mutants across the five models. A new TLA+ specification and expected
+unsafe-counterexample configs live under formal/specs/. The dedicated
+assurance-tlc.yml workflow is source-only and uses a pinned tool digest. Both
+model and collector output are private metadata; guest proof remains UNVERIFIED.
+
+See formal/refinement/ACT-BORROW-V1.md for the planned Java-to-five-backend
+refinement acceptance contract. Host/model evidence is not a substitute for a
+real compiled .atto guest run, even when a workflow reports success.

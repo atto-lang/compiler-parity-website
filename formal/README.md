@@ -1,7 +1,7 @@
 # AttoLang assurance models — bounded, executable, non-promoting
 
-This directory contains four **bounded design-state machines** in check-models.mjs,
-four reference TLA+ modules under specs/, and explicit negative mutations.
+This directory contains five **bounded design-state machines** in check-models.mjs,
+five reference TLA+ modules under specs/, and explicit negative mutations.
 These are NOT proofs of implementation refinement, unbounded liveness,
 a verified compiler, or an AttoLang guest execution.
 
@@ -12,14 +12,15 @@ a verified compiler, or an AttoLang guest execution.
 
 The checker exhaustively explores finite reachable model states within explicit
 depth/state limits, reports depth truncation, and fails closed if the state cap
-is exceeded. Six behavior-changing unsafe mutants must each produce a
+is exceeded. Nine behavior-changing unsafe mutants must each produce a
 counterexample action trace. Syntax-invalid mutants do not count.
 
 | Model | Explicit bound | Safety obligation | Negative controls |
 | --- | --- | --- | --- |
 | Actor ownership | Two actors, one slot, one transfer | Owner-only read/write; exclusive writer | Foreign writer |
+| Borrow and actor generation | A/B actors, up to two readers, one writer, two epochs | Reader/writer exclusion, generation fencing | Writer during read; stale writer after rt take |
 | Cancellation | One waiter and charged resource | Exactly-once completion and enabled wakeup | Lost wakeup; double completion |
-| RELIABLE pub-sub | Two publishers, two sends each, capacity one, two generations | No early ACK, stale queue or duplicate ACK | Early ACK; stale generation |
+| RELIABLE pub-sub | Two publishers, two sends each, capacity one, two generations | No early ACK, stale queue or duplicate ACK | Early ACK; stale generation; retained cancelled queue |
 | Hot reload | One ActorRef, two generations, one ticket | No stale ticket/retired execution | Retain old-generation ticket |
 
 Cancellation checks only an **enabledness progress condition**. Eventual
@@ -36,8 +37,9 @@ Once trusted Java and a pinned tla2tools.jar are available:
     java -cp /path/to/tla2tools.jar tlc2.TLC -config formal/specs/HotReloadFencing.cfg formal/specs/HotReloadFencing.tla
 
 TLA+ parser validity, exact TLC state counts and equivalence to the JavaScript
-reference models are **NOT VERIFIED** here. Add paired trace/state-count tests,
-pin the TLC distribution digest, then record actual model-checker receipts.
+reference models are **NOT VERIFIED** here. A new source-only TLC workflow uses a
+pinned tool-jar digest, baseline configurations and expected-mutant violation checks,
+but it has not produced executed hosted job receipts. See the runbook below.
 
 ## Mandatory implementation refinement
 
@@ -61,7 +63,7 @@ repositories/PRs from formal-data.js. It only requests GitHub API metadata,
 does not copy source, and writes to ignored private-artifacts/. It cannot attest
 a compiler binary, actual checkout, signed receipt, or real guest result.
 
-Scheduled collection requires a separately provisioned, read-only
+Manual collection requires a separately provisioned, read-only
 ATTO_ASSURANCE_READ_TOKEN GitHub Actions secret with authorized repository
 access. Its produced JSON stays in private Actions artifacts, never site files.
 
@@ -73,3 +75,30 @@ promoting any stronger claim.
 Do not enable public hosting of this private metadata without an explicit
 access/security review. The draft PR still requires successful exact-head
 stepped CI, independent submitted review and applicable branch protection.
+
+## Unified implementation and source-only TLC workflow
+
+The canonical reader is tools/collect-assurance.mjs, not a second CJS collector. It
+reads the original pull-request event/run attempt, inspects individual job steps,
+rejects duplicate job names, missing attempts and truncated job results, and
+retains runner admission versus executed-step evidence without guest promotion.
+Its private output includes the separately classified local JavaScript design-model
+report. The browser can render the report, but does not authenticate it.
+
+The exact-head TLC workflow .github/workflows/assurance-tlc.yml runs five baseline
+TLA+ specs, including ActorBorrowGeneration.tla, then requires expected invariant
+counterexamples from two intentionally unsafe mutation configs. It uses a pinned
+tla2tools.jar SHA-256, Java 21, source-head readback, and private seven-day logs.
+This workflow is source-only; it never compiles or executes .atto guests.
+The jar source and digest must be reviewed independently before enabling this lane
+as a required security gate. A malformed TLC configuration or tool failure must not
+count as a successful mutation witness.
+
+The secret-bearing collector is now workflow_dispatch-only, with a main-branch
+guard, until an administrator reviews credentials and runner access. Do not run
+an untrusted PR branch with cross-repository metadata credentials.
+
+The first proposed implementation refinement is documented in
+formal/refinement/ACT-BORROW-V1.md. It distinguishes current Java critical actor
+source fixtures from unimplemented two-reader borrow and ownership transfer
+acceptance. Source-authored fixtures are NOT compiler-backed guest evidence.

@@ -32,8 +32,8 @@
   var byInv = function (id) { return data.invariants.find(function(v){return v.id===id;}); };
   var taskStatus = function (t) { return taskState[t.id] || t.status || 'Open'; };
   var nameFor = function (id) { var v=byInv(id); return v ? v.name : id; };
-  var isSha = function(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); };
-  var validRepo = function(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); };
+  function isSha(s) { return typeof s==='string' && /^[0-9a-f]{40}$/.test(s); }
+  function validRepo(s) { return typeof s==='string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s); }
   function loadSnapshot() {
     try {
       var cached = localStorage.getItem(SNAPSHOT_KEY);
@@ -72,6 +72,15 @@
           !(Array.isArray(s) && s.length<=200)) throw new Error('Invalid job step declaration');
       }
     });
+    if(d.modelReport){
+      var model=d.modelReport;
+      if(model.classification!=='BOUNDED_DESIGN_MODEL_ONLY' ||
+         !Array.isArray(model.results) || model.results.length>100 ||
+         model.results.some(function(r){return !r || typeof r!=='object' ||
+           typeof r.model!=='string' || r.model.length>100 || typeof r.scope!=='string' ||
+           (r.counterexample && (!Array.isArray(r.counterexample) || r.counterexample.length>60))}))
+        throw new Error('Invalid bounded model report');
+    }
     d.invariants.forEach(function(x){if(typeof x.name!=='string' || typeof x.id!=='string')throw new Error('Invalid invariant');});
     d.tasks.forEach(function(t){if(!byRef(d.prs,t.prId) || !byRef(d.invariants,t.invariant))throw new Error('Task references missing PR or invariant');});
     d.templates.forEach(function(t){if(!byRef(d.invariants,t.invariant))throw new Error('Template invariant missing');});
@@ -79,21 +88,32 @@
   function byRef(items,id){return items.some(function(x){return x.id===id;});}
   function stepClassification(w) {
     if(!w) return 'NOT_INSPECTED';
-    if(w.steps===null || w.steps===0 || (Array.isArray(w.steps) && w.steps.length===0)) return 'RUNNER_NOT_ADMITTED';
-    if(w.steps==='UNKNOWN' || w.steps===undefined) return 'NOT_INSPECTED';
-    if((Array.isArray(w.steps) && w.steps.length>0) || (Number.isInteger(w.steps) && w.steps>0)) return 'STEPS_EXECUTED';
+    if(w.steps===null || w.steps===0 || (Array.isArray(w.steps) && w.steps.length===0))
+      return 'RUNNER_NOT_ADMITTED';
+    var known=['STEPS_EXECUTED','STEP_RECORDS_NOT_EXECUTED','STEP_COUNT_CLAIMED','RUNNER_NOT_ADMITTED','NOT_INSPECTED'];
+    if(known.indexOf(w.stepClassification)>=0)return w.stepClassification;
+    if(Array.isArray(w.steps)){
+      return w.steps.some(function(x){return x&&typeof x.started_at==='string' &&
+        !isNaN(Date.parse(x.started_at)) &&
+        (x.status==='completed'||x.status==='in_progress') && x.conclusion!=='skipped';})?
+        'STEPS_EXECUTED':'STEP_RECORDS_NOT_EXECUTED';
+    }
+    if(Number.isInteger(w.steps)&&w.steps>0)return 'STEP_COUNT_CLAIMED';
     return 'NOT_INSPECTED';
   }
   function stepCount(w) {
     if(!w) return 'Not inspected';
-    if(w.steps===null) return 'null';
-    if(Array.isArray(w.steps)) return '['+w.steps.length+' executed steps]';
-    if(w.steps===undefined) return 'Unknown';
-    return String(w.steps);
+    if(w.steps===null)return 'null';
+    if(Array.isArray(w.steps))return '['+w.steps.length+' records]';
+    return w.steps===undefined ? 'Unknown' : String(w.steps);
   }
   function stepLabel(p) {
     var v=stepClassification(p.workflow);
-    return v==='RUNNER_NOT_ADMITTED' ? 'Runner not admitted' : v==='STEPS_EXECUTED' ? (data.imported ? 'Claimed steps · not audited' : 'Steps executed · scope unknown') : 'Not inspected';
+    if(v==='RUNNER_NOT_ADMITTED')return 'Runner not admitted';
+    if(v==='STEPS_EXECUTED')return data.imported?'Claimed started steps · not authenticated':'Started steps reported · scope unknown';
+    if(v==='STEP_RECORDS_NOT_EXECUTED')return 'Step records · none executed';
+    if(v==='STEP_COUNT_CLAIMED')return 'Claimed count · unaudited';
+    return 'Not inspected';
   }
   function stepBadge(p) {
     var v=stepClassification(p.workflow);
@@ -225,13 +245,31 @@
   function priorityRow(t,i){
     return '<div class="signal"><div class="signal-n">'+(i+1)+'</div><div><button class="linkish" data-open-task="'+e(t.id)+'">'+e(t.title)+'</button><p>'+e(t.kind)+' · '+e(t.prId)+' · '+e(nameFor(t.invariant))+'</p></div>'+badge(t.priority,t.priority==='P0'?'red':'amber')+'</div>';
   }
+  function renderModelReport(){
+    var m=data.modelReport;
+    if(!m || m.classification!=='BOUNDED_DESIGN_MODEL_ONLY' || !Array.isArray(m.results))
+      return '<div class="panel-body"><div class="notice">No attached model-checker run report. Authored TLA+ files and source-only checks must not be counted as executed proof.</div></div>';
+    var base=m.results.filter(function(r){return !r.mutant;});
+    var bad=m.results.filter(function(r){return r.mutant;});
+    var rows=base.map(function(r){
+      return '<tr><td>'+e(r.model)+'</td><td>'+e(r.states)+'</td><td>'+e(r.edges)+'</td><td>'+badge(r.depthTruncated?'Bound truncated':'Bounded safety result',r.depthTruncated?'red':'amber')+'</td></tr>';
+    }).join('');
+    var mutations=bad.map(function(r){
+      return '<p class="sub-cell"><b>'+e(r.model)+' / '+e(r.mutant)+'</b> · '+e(r.violation||'No violation description')+
+        ' · witness: '+e(Array.isArray(r.counterexample)?r.counterexample.join(' → '):'not recorded')+'</p>';
+    }).join('');
+    return '<div class="panel-body"><div class="notice"><b>BOUNDED_DESIGN_MODEL_ONLY.</b> '+base.length+
+      ' reference models and '+bad.length+' negative controls reported. The imported report is not independently authenticated, and no guest was executed.</div>'+
+      '<div class="table-scroll"><table class="data-table"><thead><tr><th>Model</th><th>Reachable states</th><th>Transitions</th><th>Scope</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div style="margin-top:12px"><b>Mutation witnesses</b>'+mutations+'</div></div>';
+  }
   function renderOverview(){
     var ps=visiblePrs(), total=ps.length, count=function(pred){return ps.filter(pred).length;};
     var bars=[
       ['Tracked source PRs',total],
       ['Reported bounded models',count(function(p){return p.evidence==='BOUNDED_MODEL';})],
       ['Host-only evidence',count(function(p){return p.evidence==='HOST_ONLY';})],
-      ['Runner admitted with steps',count(function(p){return stepClassification(p.workflow)==='STEPS_EXECUTED';})],
+      ['Reported started-step jobs',count(function(p){return stepClassification(p.workflow)==='STEPS_EXECUTED';})],
       ['Independently audited guest',0]
     ];
     var funnel='<div class="panel-body">'+bars.map(function(r,i){return '<div class="bar-row"><span>'+e(r[0])+'</span><div class="bar-bg"><div class="bar '+(i===4?'bar-muted':'')+'" style="width:'+(total?Math.round(r[1]/total*100):0)+'%"></div></div><b>'+r[1]+'</b></div>';}).join('')+'<p class="sub-cell">Counts describe this curated snapshot, not all GitHub PRs. Executed steps do not alone prove compiler/guest success.</p></div>';
@@ -248,6 +286,7 @@
         sectionOpen('Verification funnel','The distance from authored checks to guest evidence',funnel)+
         sectionOpen('Immediate priority queue','Highest-impact unresolved tasks',priorities)+
       '</div>'+
+      sectionOpen('Bounded model evidence','Source-only finite-state exploration and mutation witnesses',renderModelReport())+
       sectionOpen('Five-backend evidence map','Coverage describes source/model/host state; it never certifies guest parity','<div class="panel-body">'+renderMatrix()+'</div>')+
       sectionOpen('Non-negotiable acceptance gates','Proof promotion rules are deliberately strict','<div class="panel-body">'+policy+'</div>')+
     '</div>';
@@ -282,19 +321,34 @@
     }).join(''):noRows())+'</div>';
   }
   function renderEvidence(){
-    var ps=visiblePrs();
-    var rows=ps.map(function(p){
-      var w=p.workflow, cls=stepClassification(w), note=cls==='RUNNER_NOT_ADMITTED'?'Runner admission evidence, not compiler failure':
-        cls==='STEPS_EXECUTED'?'Executed steps only; inspect test scope':'No job-step evidence inspected';
-      return '<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
-        '<td>'+(w?'<a href="'+runUrl(p)+'" target="_blank" rel="noopener noreferrer">'+e(w.run)+'</a>':'Not inspected')+'</td>'+
-        '<td>'+e(w&&w.job?w.job:'—')+'</td><td class="mono">'+e(w&&w.attempt!==null?w.attempt:'Unknown')+'</td>'+
-        '<td>'+e(stepCount(w))+'</td><td>'+stepBadge(p)+'</td>'+
-        '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+'</span><div class="sub-cell">Run-head bound: '+(w&&w.headBound?'Claimed, requires independent audit':'no')+'</div></td>'+
-        '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>';
-    }).join('');
-    return '<div class="notice"><strong>Scope boundary:</strong> even a successful workflow conclusion does not establish that the original PR head was checked out or that compiler→IR/CIL/Wasm→link/AOT→guest actually ran. This site cannot independently authenticate imported JSON or artifact signatures.</div>'+
-      '<div class="stack">'+sectionOpen('Workflow evidence ledger','Job steps, attempts, exact-head provenance and guest classification','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Observed steps</th><th>Admission</th><th>Source head</th><th>Guest claim</th></tr></thead><tbody>'+rows+'</tbody></table>'+(ps.length?'':noRows())+'</div>')+
+    var ps=visiblePrs(),rows=[];
+    ps.forEach(function(p){
+      var w=p.workflow, jobs=w&&Array.isArray(w.jobs)&&w.jobs.length?w.jobs:[null];
+      jobs.forEach(function(job){
+        var cls=job?job.classification:stepClassification(w);
+        var steps=job?job.steps:stepCount(w);
+        var label=cls==='RUNNER_NOT_ADMITTED'?'Runner not admitted':
+          cls==='STEPS_EXECUTED'?'Started steps claimed':
+          cls==='STEP_RECORDS_NOT_EXECUTED'?'Unstarted/skip-only records':
+          cls==='STEP_COUNT_CLAIMED'?'Count-only claim':'Not inspected';
+        var note=cls==='RUNNER_NOT_ADMITTED'?'No runner execution established, not compiler failure':
+          cls==='STEPS_EXECUTED'?'GitHub step readback, original checkout and guest unverified':
+          'No independently verified compiler-backed guest result';
+        var jobName=job?job.name:w&&w.job||'—';
+        var attempted=w&&w.attempt!==null?w.attempt:'Unknown';
+        var run=w&&Number.isSafeInteger(w.run)&&w.run>0?w.run:null;
+        var link=run?'<a href="https://github.com/'+encodeURI(p.repo)+'/actions/runs/'+run+
+          '" target="_blank" rel="noopener noreferrer">'+run+'</a>':'Not inspected';
+        rows.push('<tr><td class="primary-cell">'+e(p.repo.split('/')[1])+' #'+e(p.number)+'</td>'+
+          '<td>'+link+'</td><td>'+e(jobName)+'</td><td class="mono">'+e(attempted)+'</td>'+
+          '<td>'+e(steps)+'</td><td>'+badge(label,cls==='RUNNER_NOT_ADMITTED'?'red':cls==='STEPS_EXECUTED'?'amber':'gray')+'</td>'+
+          '<td><span class="sha" title="'+e(p.head)+'">'+e(short(p.head,9))+
+          '</span><div class="sub-cell">Run head readback ≠ actual checkout head</div></td>'+
+          '<td>'+badge('Guest UNPROVEN','red')+'<div class="sub-cell">'+e(note)+'</div></td></tr>');
+      });
+    });
+    return '<div class="notice"><strong>Scope boundary:</strong> these are reported GitHub job records, not independently authenticated run or compiler receipts. In particular, nonempty entries and run-head equality never prove actual checkout, .atto compilation, linkage or guest execution.</div>'+
+      '<div class="stack">'+sectionOpen('Workflow evidence ledger','One row per job when collector evidence includes job details','<div class="table-scroll"><table class="data-table"><thead><tr><th>Repository / PR</th><th>Run</th><th>Job</th><th>Attempt</th><th>Started-step count</th><th>Admission</th><th>Source head</th><th>Guest</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+(rows.length?'':noRows())+'</div>')+
       sectionOpen('Evidence promotion ladder','Never infer a stronger class from a weaker artifact','<div class="panel-body"><div class="receipt-policy">'+
         [['Source-authored','Specification, .atto fixture and test file exist; no execution implied.'],
          ['Model / host executed','A finite model or standalone host test ran; no production refinement implied.'],
@@ -368,6 +422,8 @@
       detail('Backend',p.backend)+detail('Severity',p.severity)+
       detail('Head SHA',p.head)+detail('Root tree',p.tree||'Not verified')+
       detail('Tree source',p.treeSource)+
+      detail('Runner checkout head/tree', 'Not independently verified by metadata collector')+
+      detail('Per-job readback',w&&Array.isArray(w.jobs)?w.jobs.map(function(j){return j.name+': '+j.classification+' (attempt '+j.attempt+')';}).join('; '):'Not inspected')+
       detail('Mapped invariants',p.invariants.map(nameFor).join('; '))+
       detail('Threat model',p.threat)+detail('Formal spec / model',p.formal)+
       detail('Properties',p.properties)+detail('Mutation tests',p.mutation)+
@@ -464,7 +520,8 @@
     var cloned=JSON.parse(JSON.stringify(snapshot));
     // A browser JSON file cannot authenticate a GitHub run or genuine compiler artifact.
     cloned.source='Unverified local JSON import';cloned.imported=true;
-    cloned.prs.forEach(function(p){p.guest='NOT_INDEPENDENTLY_VERIFIED';if(p.workflow)p.workflow.headBound=false;});
+    cloned.prs.forEach(function(p){p.guest='NOT_INDEPENDENTLY_VERIFIED';if(p.workflow){p.workflow.headBound=false;p.workflow.checkoutHeadVerified=false;}});
+    if(cloned.modelReport){cloned.modelReport.guestExecution='NOT_EXECUTED';cloned.modelReport.unboundedProof=false;cloned.modelReport.refinementProven=false;cloned.modelReport.provenance='UNVERIFIED_BROWSER_IMPORT';}
     return cloned;
   }
   document.getElementById('nav').addEventListener('click',function(ev){
