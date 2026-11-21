@@ -1,0 +1,7 @@
+# Read-only assurance collector artifacts contain private repo metadata.
+# Never commit or publish snapshots or runner receipts as static site assets.
+private-artifacts/
+*.token
+.env
+.env.*
+!.env.example

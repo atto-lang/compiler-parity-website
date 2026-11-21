@@ -1,0 +1,53 @@
+name: AttoLang private assurance metadata collection
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  private-metadata-snapshot:
+    name: read-only-GitHub-API-metadata-only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout immutable workflow source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify workflow source revision
+        shell: bash
+        env:
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          echo "SOURCE_HEAD=$EXPECTED"
+          echo "SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')"
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assert explicitly scoped read-only credential is configured
+        env:
+          ASSURANCE_READ_TOKEN: ${{ secrets.ATTO_ASSURANCE_READ_TOKEN }}
+        run: |
+          if test -z "$ASSURANCE_READ_TOKEN"; then
+            echo "::error::ATTO_ASSURANCE_READ_TOKEN is not configured; refusing unverified cross-repository collection."
+            exit 1
+          fi
+      - name: Collect scoped private GitHub metadata
+        env:
+          ASSURANCE_READ_TOKEN: ${{ secrets.ATTO_ASSURANCE_READ_TOKEN }}
+        run: node tools/collect-assurance.mjs --strict private-artifacts/assurance-latest.json
+      - name: Upload private metadata artifact (never publish as site asset)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atto-private-assurance-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: private-artifacts/assurance-latest.json
+          if-no-files-found: warn
+          retention-days: 7

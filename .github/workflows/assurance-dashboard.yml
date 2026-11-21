@@ -1,0 +1,80 @@
+name: Assurance dashboard exact-head source-only checks
+on:
+  pull_request:
+    paths:
+      - 'formal-security.html'
+      - 'formal-security.css'
+      - 'formal-security.js'
+      - 'formal-data.js'
+      - 'formal/**'
+      - 'tools/collect-assurance.mjs'
+      - 'tests/formal-security.test.cjs'
+      - 'tests/assurance-collector.test.mjs'
+      - 'tests/formal-models.test.mjs'
+      - '.github/workflows/assurance-dashboard.yml'
+      - '.github/workflows/assurance-collector.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: assurance-source-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-only-smoke:
+    name: exact-head-static-assurance-model-and-collector-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout immutable source head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact Git source head and record source-only provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_SOURCE_HEAD"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          test "${#tree}" -eq 40
+          printf '%s\n' "Git head: $actual" "Git tree: $tree"
+          mkdir -p private-artifacts
+          printf '{"classification":"SOURCE_ONLY_SITE_TEST","head":"%s","tree":"%s","run_id":"%s","attempt":"%s","job":"%s","guest_execution":"NOT_EXECUTED"}\n' \
+            "$actual" "$tree" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB" \
+            > private-artifacts/exact-head-source-only-receipt.json
+      - name: Install Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax
+        run: |
+          node --check formal-data.js
+          node --check formal-security.js
+          node --check tools/collect-assurance.mjs
+          node --check formal/check-models.mjs
+          node --check tests/formal-security.test.cjs
+          node --check tests/assurance-collector.test.mjs
+          node --check tests/formal-models.test.mjs
+      - name: Run dashboard source-only tests
+        run: node tests/formal-security.test.cjs
+      - name: Run mocked metadata collector tests
+        run: node --test tests/assurance-collector.test.mjs
+      - name: Execute bounded design models and six negative mutations
+        run: |
+          node --test tests/formal-models.test.mjs
+          node formal/check-models.mjs --json > private-artifacts/bounded-model-results.json
+      - name: Guard original engineering command center
+        run: node tests/smoke.cjs
+      - name: Upload privately scoped host-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assurance-source-only-${{ github.run_id }}-${{ github.run_attempt }}
+          path: private-artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Explicit scope statement
+        run: echo "SITE/BOUNDED HOST MODEL ONLY. No AttoLang compiler, real guest, formal TLC, production refinement or five-backend parity was executed."
