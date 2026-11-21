@@ -87,3 +87,29 @@ window.ATTO_SEED = {
   ]
 };
 
+
+/* Draft semantic-contract fixtures, not checked-in .atto files and not verified
+   against any compiler head. These cases must not increase authored/executed counters. */
+window.ATTO_SEED.fixtures.push(
+  {id:'bind-001',name:'BND-001: inferred immutable binding',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-001.atto',prs:[],layout:null,expected:'int x = 7; is valid, x has type int and cannot be rebound',notes:'Normative design target, not verified; no fixture blob SHA or compiler receipt.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-002',name:'BND-002: const inferred equivalence',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-002.atto',prs:[],layout:null,expected:'const x = 7; has the same binding behavior and inferred int as BND-001',notes:'Equivalence claim to test, not a compiler observation.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-003',name:'BND-003: const int equivalence',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-003.atto',prs:[],layout:null,expected:'const int x = 7; has identical binding behavior to BND-001/002',notes:'Explicit type with same binding contract; needs negative proof.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-004',name:'BND-004: implicit-binding rebind denied',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-004.atto',prs:[],layout:null,expected:'int x = 7; x = 8; rejected at compile time',notes:'Must prove distinct diagnostic and zero guest execution.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-005',name:'BND-005: const-inferred rebind denied',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-005.atto',prs:[],layout:null,expected:'const x = 7; x = 8; rejected at compile time',notes:'Fail-closed rejection; no accidental shadowing fallback.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-006',name:'BND-006: const-int rebind denied',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-006.atto',prs:[],layout:null,expected:'const int x = 7; x = 8; rejected at compile time',notes:'Must be equivalent to other implicit-immutable forms.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-007',name:'BND-007: let rebind accepted',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-007.atto',prs:[],layout:null,expected:'let int x = 7; x = 8; permitted only after type and ownership checks',notes:'Illustrative let syntax; compiler grammar acceptance not verified.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-008',name:'BND-008: let cannot change static type',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-008.atto',prs:[],layout:null,expected:'let int x = 7; x = "string"; compile-time type error',notes:'No implicit conversions and no retyping via reassignment.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-009',name:'BND-009: immutable referent rejects mutation',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-009.atto',prs:[],layout:null,expected:'mutating an immutable referent is rejected regardless of let binding',notes:'Syntax for referent mutation is under compiler review; target distinguishes binding and referent.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-010',name:'BND-010: mutable referent, fixed binding',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-010.atto',prs:[],layout:null,expected:'const binding may hold an explicitly mutable owned referent; referent mutation may be allowed, rebinding denied',notes:'Capability + ownership required; not an unconditional mutation permission.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-011',name:'BND-011: let with mutable referent',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-011.atto',prs:[],layout:null,expected:'rebinding and referent mutation independently checked when both permissions exist',notes:'Never infer referent write rights from let alone.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-012',name:'BND-012: borrowed alias cannot escalate',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-012.atto',prs:[],layout:null,expected:'rt borrow and rt share must not become an unauthorized mutation capability',notes:'Ownership and alias restrictions require backend-specific negative tests.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-013',name:'BND-013: rt take invalidates stale owner',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-013.atto',prs:[],layout:null,expected:'after rt take, former owner cannot mutate, read or rebind as though still owning the moved value',notes:'Compile-time borrow/ownership gate; no runtime-only substitute.',evidence:'SPEC_ONLY',observedAt:null},
+  {id:'bind-014',name:'BND-014: actor-owned referent fence',group:'Bindings & mutability',path:'PROPOSED: tests/parity/bindings/bnd-014.atto',prs:[],layout:null,expected:'let/mut never permits cross-actor writes outside authorized ownership',notes:'Negative inter-actor alias mutation must be rejected.',evidence:'SPEC_ONLY',observedAt:null}
+);
+window.ATTO_SEED.parity.push({
+  feature:'Binding & referent mutability v1',
+  cases:'BND-001…014 · three immutable equivalents, let rebind, mut referent, rt ownership negatives',
+  category:'Bindings & mutability',
+  related:[],
+  states:{'Java / GraalVM':'Unproven','LLVM':'Unproven','.NET NativeAOT':'Unproven','Wasm':'Unproven','Forge / Cranelift':'Unproven'}
+});

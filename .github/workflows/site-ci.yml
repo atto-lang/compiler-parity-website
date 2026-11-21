@@ -8,10 +8,30 @@ permissions:
 jobs:
   source-only-ui:
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Syntax and structural UI views (NOT guest compiler parity)
+      - name: Checkout immutable PR source head (not synthetic merge)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Bind observed source identity to run and attempt
+        shell: bash
         run: |
+          set -euo pipefail
+          ACTUAL_HEAD="$(git rev-parse HEAD)"
+          ACTUAL_TREE="$(git rev-parse 'HEAD^{tree}')"
+          test "$ACTUAL_HEAD" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+          printf 'SOURCE_ONLY\nHEAD=%s\nTREE=%s\nRUN_ID=%s\nRUN_ATTEMPT=%s\nJOB=%s\n' "$ACTUAL_HEAD" "$ACTUAL_TREE" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_JOB"
+      - name: Structural and adversarial dashboard tests (NOT Atto guest)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
           node --check data.js
           node --check app.js
           node tests/smoke.cjs
+          node tests/binding-contract.cjs
+          printf '%s\n' 'ATTO_GUEST_COMPILER_EXECUTION=NOT_EXECUTED'

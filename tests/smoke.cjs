@@ -5,7 +5,7 @@ const page=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const source=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const data=fs.readFileSync(path.join(root,'data.js'),'utf8');
 for(const asset of ['styles.css','data.js','app.js'])assert.ok(page.includes(asset),'missing asset '+asset);
-const views=['overview','prs','ledger','fixtures','parity','layouts','integrity','queue','checklists'];
+const views=['overview','prs','ledger','fixtures','parity','layouts','bindings','integrity','queue','checklists'];
 for(const view of views){
  const els={},e=id=>els[id]??(els[id]={innerHTML:'',textContent:'',value:'',hidden:false,style:{},dataset:{},classList:{add(){},remove(){},toggle(){}},addEventListener(){},setAttribute(){}});
  const ctx={window:{addEventListener(){},scrollTo(){}},document:{querySelector:()=>e('q'),getElementById:e,addEventListener(){}},localStorage:{getItem(){return null},setItem(){}},location:{hash:'#'+view},navigator:{},console,Date,Set,JSON,Math,Object,Number,String,RegExp,Array,encodeURI,URL,Blob,setTimeout,clearTimeout};
@@ -17,9 +17,10 @@ for(const view of views){
  if(view==='fixtures')assert.match(out,/aosoa-tail-reset/);
  if(view==='parity')assert.match(out,/Contract only/);
  if(view==='layouts')assert.match(out,/STRUCTURE|Structure of Arrays/i);
+ if(view==='bindings'){for(const decl of ['int x = 7;','const x = 7;','const int x = 7;'])assert.ok(out.includes(decl));assert.match(out,/SPEC|Spec only/);assert.match(out,/0 \/ 5/);assert.match(out,/rt borrow/);}
  if(view==='integrity')assert.match(out,/Exact-head comparator/);
  if(view==='queue')assert.match(out,/Execute true LLVM LRU/);
  if(view==='checklists')assert.match(out,/Adversarial receipt/);
  process.stdout.write('PASS '+view+'\n');
 }
-console.log('PASS 9/9 static views; host-only smoke, guest execution NOT_EXECUTED.');
+console.log('PASS 10/10 static views; host-only smoke, guest execution NOT_EXECUTED.');
