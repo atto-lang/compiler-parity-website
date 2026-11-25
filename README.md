@@ -76,7 +76,7 @@ node tests/smoke.cjs
 
 The nine views are syntax/structurally smoke-tested. This **is not** a visual-browser or compiler-backed guest test. No real AttoLang program is executed by the dashboard.
 
-You can host this repository on GitHub Pages, Cloudflare Pages, Netlify or any static host. **The repository is private; do not enable publicly reachable Pages without reviewing the PR metadata and hosting access policy.** Hosting is not automatically enabled.
+You can host this repository on GitHub Pages, Cloudflare Pages, Netlify or any static host. **Review PR metadata and hosting access policy before enabling or publishing Pages; never publish private repository metadata or credentials.** Hosting is not automatically enabled.
 
 ## License
 
