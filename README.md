@@ -1,10 +1,10 @@
-> **AI agent instructions (organization-wide):** Before working on code, issues, or pull requests, read and follow the [organization `AGENTS.md`](https://github.com/ores-truffle-oreslang/.github/blob/main/AGENTS.md), including its **merge-first stealth-development policy**. Honor any repository-local `AGENTS.md`, explicit holds, and GitHub-enforced rules.
+> **AI agent instructions (organization-wide):** Before working on code, issues, or pull requests, read and follow the [organization `AGENTS.md`](https://github.com/atto-lang/.github/blob/main/AGENTS.md), including its **merge-first stealth-development policy**. Honor any repository-local `AGENTS.md`, explicit holds, and GitHub-enforced rules.
 
 # AttoLang Engineering Command Center
 
 ## AttoLang naming migration (2026-11-18)
 
-**AttoLang** is the new public name for **Oreslang**. This `ores-truffle-oreslang/compiler-parity-website` repository is a legacy-named checkout. The corresponding AttoLang project for new work is [atto-lang/atto-compilers-parity-testing](https://github.com/atto-lang/atto-compilers-parity-testing). Do not assume that matching project names mean GitHub history, PRs, issues, code or feature completeness has been transferred. This repository's historical visualizations are not themselves executed compiler tests.
+**AttoLang** is the new public name for **Oreslang**. This repository is maintained at `atto-lang/compiler-parity-website`, with historical material from `ores-truffle-oreslang/compiler-parity-website`. The related conformance tooling project is [atto-lang/atto-compilers-parity-testing](https://github.com/atto-lang/atto-compilers-parity-testing). Do not assume that matching project names mean GitHub history, PRs, issues, code or feature completeness has been transferred. This repository's historical visualizations are not themselves executed compiler tests.
 
 The authoritative language specification is **[atto-spec](https://github.com/atto-lang/atto-spec)** (not old Oreslang README/spec prose); portable test fixtures belong in [atto-platform-conformance](https://github.com/atto-lang/atto-platform-conformance), and portable libraries in [atto-common-source](https://github.com/atto-lang/atto-common-source). The evolving language contracts include canonical `.atto` source, `snake_case` callable names, `borrow!`/`take!`/`copy!`/`copy!!`/`share!`, [implicit borrowing](https://github.com/atto-lang/atto-spec/blob/main/language/implicit-argument-borrow-v1.md), [file/module `define const` with guarded one-time `os.read_env`](https://github.com/atto-lang/atto-spec/blob/main/language/file-module-const-v1.md), and [bitwise `<<<`/`>>>`/`ashr` versus stream `<<`/`>>`](https://github.com/atto-lang/atto-spec/blob/main/language/bitwise-and-stream-operators-v1.md). These are **target rules**, not automatic execution claims for this repo.
 
@@ -42,13 +42,30 @@ There are shared filters for **repository, PR, backend, workflow, fixture, layou
 ## Evidence semantics — fail closed
 
 - `steps=[]`, `steps=null` or zero observed job steps means **runner admission was not established**. Do not report these jobs as source compilation failures.
-- A workflow's `conclusion=failure` without inspected job steps means **unknown stage**, not automatically runner admission or compiler failure.
+- A workflow's `conclusion=failure` without inspected job steps means **unknown stage**, not automatically runner admission or compiler failure. Explicit zero steps mean **no execution recorded**, but do not independently establish the cause.
 - Real stepped Rust reference, Node host-side tests and source-free GraalVM Native Image probes are **host-only evidence**. Those cannot establish `.atto` compiler or guest parity.
 - `ATTO_GUEST_COMPILER_EXECUTION=NOT_EXECUTED` means **guest parity is not proven**.
 - Authored fixtures, source-tree inspection, host-only mutation tests, an `ore`/`atto` launcher stub, and expected exit values are all distinct from actual guest execution.
 - A native guest receipt needs an independently audited run and job attempt, nonzero steps, full head/tree identity, source compiler, native/AOT linking where required, exact fixture blobs, native guest exit/output and negative mutation controls.
 - Workflow phase counters count `sourceCompiled` and `nativeLinked` only when a **bound audited receipt** is present. The import schema can carry `proof` fields for future auditable updates, but the site does **not** independently query a remote API to validate a claimed receipt. Always verify imported receipts against GitHub before trusting or publishing.
 - Requested reviewers and Git mergeability do not substitute for submitted independent approval, branch protection, exact-head CI or a verified merge commit.
+
+## Imported proof is never an authenticated verdict
+
+This browser is offline and accepts user-provided JSON and localStorage values. A JSON
+`proof.independentlyAudited: true`, `receiptVerified: true`, matching SHA strings,
+or a reported `merged: true` is **self-asserted** and cannot authenticate GitHub
+runs, job steps, a compiler binary, or guest output. Even structurally complete
+imported proof is shown as **Guest claim · unverified**; authenticated guest,
+source-compilation and native-link counters remain unproven in this static site.
+Only a separately trusted CI/connector verification can issue a release verdict;
+a future cryptographically verifiable signed import would require an explicitly
+trusted signing key and real signature verification before elevating counters.
+
+`steps=null` is **uninspected**, not a proven zero-step failure.
+An explicit `steps=[]` or zero is **no steps recorded**, not a proven billing,
+policy or runner-admission root cause. Any imported conclusion is subject to
+the same provenance limitation.
 
 ## Seed provenance
 
@@ -76,8 +93,16 @@ node tests/smoke.cjs
 
 The nine views are syntax/structurally smoke-tested. This **is not** a visual-browser or compiler-backed guest test. No real AttoLang program is executed by the dashboard.
 
-You can host this repository on GitHub Pages, Cloudflare Pages, Netlify or any static host. **The repository is private; do not enable publicly reachable Pages without reviewing the PR metadata and hosting access policy.** Hosting is not automatically enabled.
+You can host this repository on GitHub Pages, Cloudflare Pages, Netlify or any static host. **Review PR metadata and hosting access policy before enabling or publishing Pages; never publish private repository metadata or credentials.** Hosting is not automatically enabled.
 
 ## License
 
 This generated dashboard is provided for your internal engineering workflow. No third-party UI libraries are bundled.
+
+## Legacy migration and verification gates
+
+The historical predecessor was `ores-truffle-oreslang/compiler-parity-website`. This repository is now maintained in `atto-lang`; naming or imported history does not establish preservation of the original numeric repository ID, code parity or compiler support. Preserve working legacy `.ores` inputs and historical package/CLI aliases until replacement paths have been verified; new source follows canonical `.atto` contracts.
+
+Read-only exact-SHA/tree, fixture coverage and executed CI dashboards belong here; compiler modifications and accepting unverified evidence do not. [atto-lang](https://github.com/atto-lang) owns language, tooling and portable libraries; [atto-co](https://github.com/atto-co) separately governs commercial deployment, tenant infrastructure, identity, registry and billing. Any further original-ID transfer or managed-product carve-out requires separate owner authorization. This document authorizes no direct legacy-org transfer to atto-co.
+
+Before an actual transfer, coordinate through [migration issue #26](https://github.com/ores-truffle-oreslang/.github/issues/26) and authorized source/target administrators and independent security reviewers. Inventory repository numeric ID, exact head/tree, history, visibility, access, rulesets, open PRs, releases, packages, CI/runners, secrets, deploy keys, apps, webhooks, Pages, consumers and rollback ownership. Never mirror private source without authorization. Verify unchanged ID/history/tree and restored controls after transfer, then execute exact-head tests before changing consumer references. Zero-step CI is NOT_EXECUTED; host-only and source-free tests are not compiled guest evidence.
