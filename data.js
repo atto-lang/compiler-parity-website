@@ -87,3 +87,62 @@ window.ATTO_SEED = {
   ]
 };
 
+// Executed integration snapshot; kept separate from independent parity certification.
+window.ATTO_BROWSER = {
+  "date": "2026-11-10",
+  "sourceRepository": "ores-truffle-oreslang/oreslang-source.rs",
+  "head": "9b40edd07e78c69f541408ad41d7349f34725f1c",
+  "tree": "3937d26010d59d0648afe601c035afa7455557a2",
+  "compilerSha256": "1acd37c8f460aba821bfe791d268f37c5fa47599d152b2108cdacb90554ead9b",
+  "compilerBytes": 274237,
+  "carrierRepository": "atto-lang/atto-source.rs",
+  "carrierHead": "3b898fd07b1571c0f08cfa99d5305aa0bbf8f53b",
+  "run": 42921459862,
+  "job": 130197067771,
+  "steps": 13,
+  "checks": 332,
+  "rows": [
+    {
+      "backend": "Rust browser target",
+      "repo": "ores-truffle-oreslang/oreslang-source.rs",
+      "state": "EXECUTED · Wasm + ESM",
+      "detail": "browser/ owns the frontend and typed-IR emitters; root oresc --wasm / --js selects them. Actor state uses fixed private wasm32 memory."
+    },
+    {
+      "backend": "JavaScript transpiler",
+      "repo": "ores-truffle-oreslang/oreslang-source.js",
+      "state": "INTEGRATION CANDIDATE",
+      "detail": "Canonical-browser ESM and Wasm now share the pinned tenant scheduler: one Worker per tenant, private actor memories, MessageChannel turns, FIFO and aggregate quotas. Source Task/await lowering remains unsupported."
+    },
+    {
+      "backend": "Wasm browser bridge",
+      "repo": "ores-truffle-oreslang/oreslang-source.wasm",
+      "state": "INTEGRATION CANDIDATE",
+      "detail": "On-device compiler-ABI adapter plus the exact pinned JS tenant runtime; both output targets execute through the same carrier. Native LLVM/Clang zero-import scalar host is unchanged."
+    },
+    {
+      "backend": "Rust native",
+      "repo": "ores-truffle-oreslang/oreslang-source.rs",
+      "state": "ACTOR GAP",
+      "detail": "Native Cranelift frontend rejects the unchanged actor fixture; browser target success does not certify native actor code generation."
+    },
+    {
+      "backend": "Independent Cranelift",
+      "repo": "ores-truffle-oreslang/oreslang-source.cranelift",
+      "state": "ACTOR GAP",
+      "detail": "Native scalar tests execute, but define actor rejects with DECL_KIND_UNSUPPORTED. It does not emit browser code."
+    },
+    {
+      "backend": "Java / GraalVM reference",
+      "repo": "ores-truffle-oreslang/oreslang-source.java",
+      "state": "5 DIFFERENTIAL FAILURES",
+      "detail": "Three eager-vs-short-circuit differences, actor shutdown/unordered-output race, and a declaration Java accepts but the browser subset rejects."
+    },
+    {
+      "backend": "LLVM reference",
+      "repo": "ores-truffle-oreslang/oreslang-source.llvm",
+      "state": "ACTOR ABI GAP",
+      "detail": "LLVM19 build succeeds. Unchanged receive(ActorMail<int>) source rejects: native actor requires pub on_message(int); zero LLVM IR emitted."
+    }
+  ]
+};
